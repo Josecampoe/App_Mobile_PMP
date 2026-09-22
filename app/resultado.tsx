@@ -1,10 +1,15 @@
 import { View, Text, TouchableOpacity, ScrollView, ImageBackground } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ResultadoScreen() {
   const router = useRouter();
+  const { imageUri } = useLocalSearchParams<{ imageUri?: string }>();
+
+  // Imagen capturada o de respaldo
+  const displayImageUri =
+    imageUri || 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a';
 
   return (
     <SafeAreaView className="flex-1 bg-[#FFFDF5]">
@@ -21,14 +26,21 @@ export default function ResultadoScreen() {
       {/* 2. CONTENIDO PRINCIPAL */}
       <ScrollView className="flex-1 px-4 pt-4">
         {/* 3. MINIATURA DE LA FOTO */}
-        <View className="h-40 w-full rounded-2xl overflow-hidden relative shadow-sm border border-gray-200 mb-5">
+        <View className="h-48 w-full rounded-2xl overflow-hidden relative shadow-sm border border-gray-200 mb-5 bg-gray-900">
           <ImageBackground
-            source={{ uri: 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a' }}
+            source={{ uri: displayImageUri }}
+            resizeMode="cover"
             className="flex-1"
           >
-            <View className="absolute top-0 left-0 bg-black/60 px-3 py-1 rounded-br-xl rounded-tl-xl">
-              <Text className="text-white text-xs">📍 Finca El Porvenir</Text>
+            <View className="absolute top-0 left-0 bg-black/60 px-3 py-1.5 rounded-br-xl rounded-tl-xl flex-row items-center">
+              <FontAwesome name="map-marker" size={12} color="#81C784" />
+              <Text className="text-white text-xs ml-1.5 font-medium">Finca El Porvenir</Text>
             </View>
+            {imageUri && (
+              <View className="absolute bottom-2 right-2 bg-black/70 px-2.5 py-1 rounded-lg">
+                <Text className="text-xs text-[#81C784] font-medium">✓ Foto capturada</Text>
+              </View>
+            )}
           </ImageBackground>
         </View>
 
