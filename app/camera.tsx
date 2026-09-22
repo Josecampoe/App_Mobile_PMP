@@ -1,19 +1,48 @@
-import { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Modal,
+  ScrollView,
+} from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, FlashMode, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { useApp } from '../context/AppContext';
 
 export default function CameraScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ cultivoId?: string }>();
   const cameraRef = useRef<CameraView>(null);
+
+  const { cultivos, selectedCultivoId, setSelectedCultivoId } = useApp();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
   const [isCapturing, setIsCapturing] = useState(false);
+  const [selectorVisible, setSelectorVisible] = useState(false);
+
+  // Inicializar cultivo seleccionado si vino por parámetro
+  useEffect(() => {
+    if (params.cultivoId) {
+      setSelectedCultivoId(params.cultivoId);
+    }
+  }, [params.cultivoId]);
+
+  const currentCultivo =
+    cultivos.find((c) => c.id === selectedCultivoId) ||
+    cultivos[0] || {
+      id: 'default',
+      nombre: 'Finca General',
+      variedad: 'Papa Comercial',
+    };
 
   // Seleccionar foto de la galería
   const pickImageFromGallery = async () => {
@@ -28,7 +57,11 @@ export default function CameraScreen() {
       if (!result.canceled && result.assets?.[0]?.uri) {
         router.push({
           pathname: '/resultado',
-          params: { imageUri: result.assets[0].uri },
+          params: {
+            imageUri: result.assets[0].uri,
+            cultivoId: currentCultivo.id,
+            cultivoNombre: currentCultivo.nombre,
+          },
         });
       }
     } catch (error) {
@@ -50,7 +83,11 @@ export default function CameraScreen() {
       if (photo?.uri) {
         router.push({
           pathname: '/resultado',
-          params: { imageUri: photo.uri },
+          params: {
+            imageUri: photo.uri,
+            cultivoId: currentCultivo.id,
+            cultivoNombre: currentCultivo.nombre,
+          },
         });
       }
     } catch (error) {
@@ -122,7 +159,7 @@ export default function CameraScreen() {
         </View>
 
         <Text className="text-gray-500 text-xs text-center">
-          Tus fotografías solo se procesan para el diagnóstico de cultivos.
+          Tus fotografías solo se procesan para el diagnóstico fitosanitario de tus parcelas.
         </Text>
       </SafeAreaView>
     );
@@ -168,7 +205,7 @@ export default function CameraScreen() {
             {/* Mensaje de recomendación */}
             <View className="bg-black/60 px-4 py-2 rounded-full mb-6 border border-white/10">
               <Text className="text-white text-xs text-center">
-                💡 Enfoca las hojas de la planta con buena luz
+                💡 Enfoca las hojas apicales y brotes con buena luz
               </Text>
             </View>
 
@@ -193,10 +230,15 @@ export default function CameraScreen() {
 
           {/* Capa inferior: Selector de cultivo y disparadores */}
           <View className="bg-black/75 pt-4 pb-8 px-6 rounded-t-3xl border-t border-white/10 items-center">
-            {/* Selector de cultivo */}
-            <TouchableOpacity className="bg-white/10 rounded-full px-4 py-1.5 mb-6 flex-row items-center border border-white/10">
-              <Text className="text-gray-200 text-xs">📍 Finca El Porvenir</Text>
-              <FontAwesome name="caret-down" size={14} color="#D1D5DB" className="ml-2" />
+            {/* Selector interactivo de cultivo */}
+            <TouchableOpacity
+              onPress={() => setSelectorVisible(true)}
+              className="bg-white/15 active:bg-white/25 rounded-full px-4 py-2 mb-6 flex-row items-center border border-white/20">
+              <FontAwesome name="map-marker" size={13} color="#81C784" />
+              <Text className="text-white text-xs font-semibold ml-2">
+                {currentCultivo.nombre} ({currentCultivo.variedad})
+              </Text>
+              <FontAwesome name="chevron-down" size={11} color="#D1D5DB" className="ml-2.5" />
             </TouchableOpacity>
 
             {/* Fila de controles: Galería | Disparador | Rotar */}
@@ -232,6 +274,66 @@ export default function CameraScreen() {
           </View>
         </SafeAreaView>
       </CameraView>
+
+      {/* MODAL: SELECCIONAR PARCELA / CULTIVO */}
+      <Modal visible={selectorVisible} transparent animationType="fade">
+        <View className="flex-1 bg-black/70 justify-center px-6">
+          <View className="bg-white rounded-2xl p-5 max-h-[70%]">
+            <View className="flex-row justify-between items-center mb-3 pb-2 border-b border-gray-100">
+              <Text className="text-base font-bold text-[#263238]">Selecciona el Cultivo / Lote</Text>
+              <TouchableOpacity onPress={() => setSelectorVisible(false)}>
+                <FontAwesome name="times" size={16} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text className="text-xs text-gray-500 mb-3">
+              Indica en qué parcela estás tomando la fotografía para vincular el diagnóstico.
+            </Text>
+
+            <ScrollView className="max-h-60">
+              {cultivos.map((cultivo) => {
+                const isSelected = cultivo.id === currentCultivo.id;
+                return (
+                  <TouchableOpacity
+                    key={cultivo.id}
+                    onPress={() => {
+                      setSelectedCultivoId(cultivo.id);
+                      setSelectorVisible(false);
+                    }}
+                    className={`p-3 rounded-xl mb-2 flex-row justify-between items-center border ${
+                      isSelected
+                        ? 'bg-emerald-50 border-[#2E7D32]'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}>
+                    <View className="flex-1">
+                      <Text
+                        className={`text-sm font-bold ${
+                          isSelected ? 'text-[#2E7D32]' : 'text-gray-800'
+                        }`}>
+                        {cultivo.nombre}
+                      </Text>
+                      <Text className="text-xs text-gray-500">
+                        {cultivo.variedad} · {cultivo.hectareas} Ha
+                      </Text>
+                    </View>
+                    {isSelected && <FontAwesome name="check" size={14} color="#2E7D32" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => {
+                setSelectorVisible(false);
+                router.push('/(tabs)/cultivos');
+              }}
+              className="mt-3 py-2.5 bg-gray-100 rounded-xl items-center flex-row justify-center">
+              <FontAwesome name="plus" size={12} color="#4B5563" />
+              <Text className="text-xs font-semibold text-gray-700 ml-2">Registrar Nuevo Lote</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
