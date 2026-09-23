@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, Cultivo } from '../../context/AppContext';
+import RoleSelector from '../../components/RoleSelector';
 
 const VARIEDADES_PAPA = [
   'Papa Pastusa Suprema',
@@ -24,7 +25,14 @@ const VARIEDADES_PAPA = [
 
 export default function CultivosScreen() {
   const router = useRouter();
-  const { cultivos, addCultivo, deleteCultivo, setSelectedCultivoId } = useApp();
+  const {
+    rolActivo,
+    cultivos,
+    addCultivo,
+    deleteCultivo,
+    setSelectedCultivoId,
+    analisisHistorial,
+  } = useApp();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [nombre, setNombre] = useState('');
@@ -58,20 +66,19 @@ export default function CultivosScreen() {
       estadoFitosanitario: 'optimo',
     });
 
-    // Limpiar formulario y cerrar modal
     setNombre('');
     setVariedad(VARIEDADES_PAPA[0]);
     setHectareas('');
     setUbicacion('');
     setFechaSiembra('');
     setModalVisible(false);
-    Alert.alert('¡Éxito!', 'Cultivo registrado correctamente en tu lista de monitoreo.');
+    Alert.alert('¡Éxito!', 'Parcela registrada correctamente.');
   };
 
   const handleEliminarCultivo = (cultivo: Cultivo) => {
     Alert.alert(
-      'Eliminar Cultivo',
-      `¿Estás seguro de eliminar "${cultivo.nombre}"? Los análisis anteriores se conservarán.`,
+      'Eliminar Parcela',
+      `¿Estás seguro de eliminar "${cultivo.nombre}"? Los análisis previos continuarán en tu historial.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -121,23 +128,36 @@ export default function CultivosScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#FFFDF5]">
       {/* 1. ENCABEZADO */}
-      <View className="bg-white px-5 py-4 flex-row justify-between items-center border-b border-gray-100 shadow-sm shrink-0">
-        <View>
-          <Text className="text-xl font-bold text-[#263238]">Mis Cultivos</Text>
-          <Text className="text-xs text-gray-500">Monitoreo fitosanitario de parcelas</Text>
+      <View className="bg-white px-5 pt-3 pb-3 border-b border-gray-100 shadow-sm shrink-0">
+        <View className="flex-row justify-between items-center mb-2.5">
+          <View>
+            <Text className="text-xl font-bold text-[#263238]">
+              {rolActivo === 'agricultor' ? 'Mis Parcelas y Fincas' : 'Lotes en Vigilancia'}
+            </Text>
+            <Text className="text-xs text-gray-500">
+              {rolActivo === 'agricultor'
+                ? 'Control fitosanitario de tus cultivos'
+                : 'Inspección de predios agrícolas registrados'}
+            </Text>
+          </View>
+
+          {rolActivo === 'agricultor' && (
+            <TouchableOpacity
+              onPress={() => setModalVisible(true)}
+              className="bg-[#2E7D32] flex-row items-center px-3.5 py-2 rounded-xl active:scale-95 shadow-sm">
+              <FontAwesome name="plus" size={13} color="white" />
+              <Text className="text-white text-xs font-bold ml-1.5">Nuevo Lote</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <TouchableOpacity
-          onPress={() => setModalVisible(true)}
-          className="bg-[#2E7D32] flex-row items-center px-3.5 py-2 rounded-xl active:scale-95 shadow-sm">
-          <FontAwesome name="plus" size={13} color="white" />
-          <Text className="text-white text-xs font-bold ml-1.5">Nuevo Lote</Text>
-        </TouchableOpacity>
+
+        {/* Selector de rol */}
+        <RoleSelector />
       </View>
 
       <ScrollView className="flex-1 px-4 pt-4 pb-20" showsVerticalScrollIndicator={false}>
         {/* 2. RESUMEN DE INDICADORES (KPIs) */}
         <View className="flex-row gap-2.5 mb-5">
-          {/* Tarjeta 1: Hectáreas */}
           <View className="flex-1 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-[11px] font-semibold text-gray-400 uppercase">Superficie</Text>
@@ -146,27 +166,25 @@ export default function CultivosScreen() {
             <Text className="text-xl font-extrabold text-[#263238]">
               {totalHectareas.toFixed(1)} <Text className="text-xs font-medium text-gray-500">Ha</Text>
             </Text>
-            <Text className="text-[10px] text-gray-400 mt-0.5">{cultivos.length} lotes activos</Text>
+            <Text className="text-[10px] text-gray-400 mt-0.5">{cultivos.length} lotes totales</Text>
           </View>
 
-          {/* Tarjeta 2: En Alerta */}
           <View className="flex-1 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm">
             <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-[11px] font-semibold text-gray-400 uppercase">Alertas PMP</Text>
+              <Text className="text-[11px] font-semibold text-gray-400 uppercase">Alertas</Text>
               <FontAwesome name="exclamation-circle" size={13} color="#DC2626" />
             </View>
             <Text className="text-xl font-extrabold text-[#DC2626]">{cultivosEnAlerta}</Text>
-            <Text className="text-[10px] text-gray-400 mt-0.5">Requieren revisión</Text>
+            <Text className="text-[10px] text-gray-400 mt-0.5">En vigilancia</Text>
           </View>
 
-          {/* Tarjeta 3: Sanos */}
           <View className="flex-1 bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-[11px] font-semibold text-gray-400 uppercase">Sanos</Text>
               <FontAwesome name="check-circle" size={13} color="#16A34A" />
             </View>
             <Text className="text-xl font-extrabold text-[#16A34A]">{cultivosOptimos}</Text>
-            <Text className="text-[10px] text-gray-400 mt-0.5">En estado óptimo</Text>
+            <Text className="text-[10px] text-gray-400 mt-0.5">Estado óptimo</Text>
           </View>
         </View>
 
@@ -175,32 +193,44 @@ export default function CultivosScreen() {
           <Text className="text-xs font-bold text-gray-400 uppercase tracking-wider">
             PARCELAS REGISTRADAS ({cultivos.length})
           </Text>
-          <Text className="text-xs text-[#2E7D32] font-semibold">Toca para escanear</Text>
+          {rolActivo === 'agricultor' && cultivos.length > 0 && (
+            <Text className="text-xs text-[#2E7D32] font-semibold">Toca para escanear</Text>
+          )}
         </View>
 
         {cultivos.length === 0 ? (
-          <View className="bg-white rounded-2xl p-8 items-center justify-center border border-dashed border-gray-300 mt-4">
+          <View className="bg-white rounded-2xl p-8 items-center justify-center border-2 border-dashed border-gray-200 mt-2">
             <View className="w-16 h-16 rounded-full bg-emerald-50 items-center justify-center mb-3">
               <FontAwesome name="leaf" size={28} color="#2E7D32" />
             </View>
-            <Text className="text-base font-bold text-gray-800 text-center">No tienes lotes registrados</Text>
-            <Text className="text-xs text-gray-500 text-center mt-1 mb-4 leading-relaxed">
-              Registra tus fincas o parcelas de papa para llevar el control fitosanitario y realizar análisis guiados.
+            <Text className="text-base font-bold text-gray-800 text-center">
+              {rolActivo === 'agricultor'
+                ? 'No has registrado parcelas aún'
+                : 'No hay parcelas registradas para supervisar'}
             </Text>
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              className="bg-[#2E7D32] px-5 py-2.5 rounded-xl shadow-sm">
-              <Text className="text-white text-xs font-bold">+ Registrar Primer Cultivo</Text>
-            </TouchableOpacity>
+            <Text className="text-xs text-gray-500 text-center mt-1 mb-4 leading-relaxed">
+              {rolActivo === 'agricultor'
+                ? 'Ingresa los datos reales de tus lotes de papa (variedad, ubicación y hectáreas) para vincular los análisis con la cámara.'
+                : 'Pide a los agricultores que registren sus fincas o utiliza el botón para añadir un lote de demostración.'}
+            </Text>
+            {rolActivo === 'agricultor' && (
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                className="bg-[#2E7D32] px-5 py-2.5 rounded-xl shadow-sm active:scale-95">
+                <Text className="text-white text-xs font-bold">+ Registrar Mi Parcela</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           cultivos.map((cultivo) => {
             const badge = getBadgeEstado(cultivo.estadoFitosanitario);
+            const analisisDeEsteLote = analisisHistorial.filter(
+              (a) => a.cultivoId === cultivo.id || a.cultivoNombre === cultivo.nombre
+            );
             return (
               <View
                 key={cultivo.id}
                 className="bg-white rounded-2xl p-4 mb-3.5 border border-gray-100 shadow-sm">
-                {/* Cabecera de la tarjeta */}
                 <View className="flex-row items-start justify-between mb-2.5">
                   <View className="flex-1 mr-2">
                     <Text className="text-base font-bold text-[#263238]">{cultivo.nombre}</Text>
@@ -210,7 +240,6 @@ export default function CultivosScreen() {
                     </View>
                   </View>
 
-                  {/* Badge de Estado Fitosanitario */}
                   <View className={`px-2.5 py-1 rounded-full border flex-row items-center ${badge.bg}`}>
                     <View
                       style={{ backgroundColor: badge.dotColor }}
@@ -220,7 +249,7 @@ export default function CultivosScreen() {
                   </View>
                 </View>
 
-                {/* Detalles del Cultivo */}
+                {/* Detalles de la parcela */}
                 <View className="bg-[#FAF9F5] rounded-xl p-3 mb-3 flex-row justify-between">
                   <View>
                     <Text className="text-[10px] text-gray-400 uppercase font-semibold">Variedad</Text>
@@ -233,30 +262,34 @@ export default function CultivosScreen() {
                   <View className="items-end">
                     <Text className="text-[10px] text-gray-400 uppercase font-semibold">Análisis</Text>
                     <Text className="text-xs font-bold text-gray-700 mt-0.5">
-                      {cultivo.analisisCount} {cultivo.analisisCount === 1 ? 'escaneo' : 'escaneos'}
+                      {analisisDeEsteLote.length} {analisisDeEsteLote.length === 1 ? 'escaneo' : 'escaneos'}
                     </Text>
                   </View>
                 </View>
 
-                {/* Pie de tarjeta y acciones */}
+                {/* Pie de tarjeta */}
                 <View className="flex-row items-center justify-between pt-1 border-t border-gray-100">
                   <Text className="text-[11px] text-gray-400">
                     Siembra: <Text className="text-gray-600 font-medium">{cultivo.fechaSiembra}</Text>
                   </Text>
 
                   <View className="flex-row items-center gap-2">
-                    <TouchableOpacity
-                      onPress={() => handleEliminarCultivo(cultivo)}
-                      className="p-2 rounded-lg bg-gray-50 border border-gray-200">
-                      <FontAwesome name="trash-o" size={14} color="#9CA3AF" />
-                    </TouchableOpacity>
+                    {rolActivo === 'agricultor' && (
+                      <>
+                        <TouchableOpacity
+                          onPress={() => handleEliminarCultivo(cultivo)}
+                          className="p-2 rounded-lg bg-gray-50 border border-gray-200">
+                          <FontAwesome name="trash-o" size={14} color="#9CA3AF" />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                      onPress={() => iniciarEscaneoCultivo(cultivo.id)}
-                      className="bg-[#2E7D32] flex-row items-center px-3.5 py-2 rounded-xl active:scale-95 shadow-sm">
-                      <FontAwesome name="camera" size={12} color="white" />
-                      <Text className="text-white text-xs font-bold ml-1.5">Analizar</Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => iniciarEscaneoCultivo(cultivo.id)}
+                          className="bg-[#2E7D32] flex-row items-center px-3.5 py-2 rounded-xl active:scale-95 shadow-sm">
+                          <FontAwesome name="camera" size={12} color="white" />
+                          <Text className="text-white text-xs font-bold ml-1.5">Analizar</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 </View>
               </View>
@@ -265,15 +298,14 @@ export default function CultivosScreen() {
         )}
       </ScrollView>
 
-      {/* 4. MODAL: REGISTRAR NUEVO CULTIVO */}
+      {/* MODAL: REGISTRAR NUEVA PARCELA */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-white rounded-t-3xl p-5 max-h-[90%]">
-            {/* Header del modal */}
             <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
               <View>
-                <Text className="text-lg font-bold text-[#263238]">Registrar Nuevo Cultivo</Text>
-                <Text className="text-xs text-gray-500">Agrega una parcela para monitoreo de PMP</Text>
+                <Text className="text-lg font-bold text-[#263238]">Registrar Nueva Parcela</Text>
+                <Text className="text-xs text-gray-500">Datos reales de tu cultivo de papa</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setModalVisible(false)}
@@ -283,19 +315,17 @@ export default function CultivosScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} className="mb-4">
-              {/* Campo: Nombre */}
               <View className="mb-3.5">
-                <Text className="text-xs font-bold text-gray-700 mb-1.5">Nombre de la Finca o Parcela *</Text>
+                <Text className="text-xs font-bold text-gray-700 mb-1.5">Nombre de la Finca / Lote *</Text>
                 <TextInput
                   value={nombre}
                   onChangeText={setNombre}
-                  placeholder="Ej: Lote El Mirador / Finca San Carlos"
+                  placeholder="Ej: Lote El Trébol / Finca San José"
                   placeholderTextColor="#9CA3AF"
                   className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800"
                 />
               </View>
 
-              {/* Campo: Variedad de Papa (Pills) */}
               <View className="mb-3.5">
                 <Text className="text-xs font-bold text-gray-700 mb-1.5">Variedad de Papa *</Text>
                 <View className="flex-row flex-wrap gap-2">
@@ -322,14 +352,13 @@ export default function CultivosScreen() {
                 </View>
               </View>
 
-              {/* Fila: Hectáreas y Ubicación */}
               <View className="flex-row gap-3 mb-3.5">
                 <View className="flex-1">
                   <Text className="text-xs font-bold text-gray-700 mb-1.5">Hectáreas (Ha) *</Text>
                   <TextInput
                     value={hectareas}
                     onChangeText={setHectareas}
-                    placeholder="Ej: 2.5"
+                    placeholder="Ej: 1.5"
                     keyboardType="decimal-pad"
                     placeholderTextColor="#9CA3AF"
                     className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800"
@@ -337,31 +366,29 @@ export default function CultivosScreen() {
                 </View>
 
                 <View className="flex-1">
-                  <Text className="text-xs font-bold text-gray-700 mb-1.5">Fecha Siembra</Text>
+                  <Text className="text-xs font-bold text-gray-700 mb-1.5">Fecha de Siembra</Text>
                   <TextInput
                     value={fechaSiembra}
                     onChangeText={setFechaSiembra}
-                    placeholder="Ej: 10 Ago 2026"
+                    placeholder="Ej: 15 Jul 2026"
                     placeholderTextColor="#9CA3AF"
                     className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800"
                   />
                 </View>
               </View>
 
-              {/* Campo: Ubicación */}
               <View className="mb-4">
                 <Text className="text-xs font-bold text-gray-700 mb-1.5">Ubicación / Municipio</Text>
                 <TextInput
                   value={ubicacion}
                   onChangeText={setUbicacion}
-                  placeholder="Ej: Pasto, Nariño (Vereda Santa Bárbara)"
+                  placeholder="Ej: Túquerres, Nariño (Vereda El Espino)"
                   placeholderTextColor="#9CA3AF"
                   className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800"
                 />
               </View>
             </ScrollView>
 
-            {/* Botones de acción modal */}
             <View className="flex-row gap-3 pt-2 border-t border-gray-100">
               <TouchableOpacity
                 onPress={() => setModalVisible(false)}
@@ -371,7 +398,7 @@ export default function CultivosScreen() {
               <TouchableOpacity
                 onPress={handleCrearCultivo}
                 className="flex-1 py-3 rounded-xl bg-[#2E7D32] items-center shadow-md">
-                <Text className="text-white font-bold text-sm">Guardar Lote</Text>
+                <Text className="text-white font-bold text-sm">Guardar Parcela</Text>
               </TouchableOpacity>
             </View>
           </View>

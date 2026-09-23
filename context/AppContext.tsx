@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export type RolUsuario = 'agricultor' | 'tecnico';
+
 export interface Cultivo {
   id: string;
   nombre: string;
@@ -11,6 +13,20 @@ export interface Cultivo {
   estadoFitosanitario: 'optimo' | 'observacion' | 'alerta';
   analisisCount: number;
   ultimaRevision: string;
+}
+
+export interface RevisionTecnica {
+  tecnicoNombre: string;
+  registroProfesional?: string;
+  fechaRevision: string;
+  diagnosticoValidado:
+    | 'PMP Confirmado'
+    | 'Sospecha Moderada'
+    | 'Descartado - Sano'
+    | 'Deficiencia Nutricional'
+    | 'Virosis / Otra Afección';
+  observaciones: string;
+  tratamientoRecomendado: string;
 }
 
 export interface Analisis {
@@ -26,11 +42,12 @@ export interface Analisis {
   sintomas: string[];
   recomendaciones: string[];
   notas?: string;
+  estadoRevision: 'sin_solicitar' | 'pendiente' | 'revisado';
+  revisionTecnica?: RevisionTecnica;
 }
 
-export interface Perfil {
+export interface PerfilAgricultor {
   nombre: string;
-  rol: string;
   fincaPrincipal: string;
   ubicacion: string;
   telefono: string;
@@ -39,151 +56,144 @@ export interface Perfil {
   modoOffline: boolean;
 }
 
+export interface PerfilTecnico {
+  nombre: string;
+  registroProfesional: string;
+  especialidad: string;
+  entidad: string;
+  telefono: string;
+  email: string;
+  notificaciones: boolean;
+}
+
 interface AppContextType {
+  rolActivo: RolUsuario;
+  setRolActivo: (rol: RolUsuario) => void;
   cultivos: Cultivo[];
   analisisHistorial: Analisis[];
-  perfil: Perfil;
+  perfilAgricultor: PerfilAgricultor;
+  perfilTecnico: PerfilTecnico;
   selectedCultivoId: string;
   setSelectedCultivoId: (id: string) => void;
-  addCultivo: (cultivo: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>) => void;
+  addCultivo: (cultivo: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>) => Cultivo;
   deleteCultivo: (id: string) => void;
   addAnalisis: (analisis: Omit<Analisis, 'id' | 'fecha'>) => Analisis;
   deleteAnalisis: (id: string) => void;
-  updatePerfil: (datos: Partial<Perfil>) => void;
+  solicitarRevisionTecnica: (analisisId: string) => void;
+  guardarRevisionTecnica: (analisisId: string, revision: Omit<RevisionTecnica, 'fechaRevision'>) => void;
+  updatePerfilAgricultor: (datos: Partial<PerfilAgricultor>) => void;
+  updatePerfilTecnico: (datos: Partial<PerfilTecnico>) => void;
+  cargarDatosDemo: () => void;
+  limpiarTodosLosDatos: () => void;
   isLoading: boolean;
 }
 
 const STORAGE_KEYS = {
-  CULTIVOS: '@pmp_smart_cultivos_v1',
-  HISTORIAL: '@pmp_smart_historial_v1',
-  PERFIL: '@pmp_smart_perfil_v1',
+  ROL_ACTIVO: '@pmp_smart_rol_activo_v2',
+  CULTIVOS: '@pmp_smart_cultivos_v2',
+  HISTORIAL: '@pmp_smart_historial_v2',
+  PERFIL_AGRICULTOR: '@pmp_smart_perfil_agr_v2',
+  PERFIL_TECNICO: '@pmp_smart_perfil_tec_v2',
 };
 
-const DEFAULT_CULTIVOS: Cultivo[] = [
-  {
-    id: 'c-1',
-    nombre: 'Finca El Porvenir',
-    variedad: 'Papa Pastusa Suprema',
-    hectareas: 2.5,
-    ubicacion: 'Pasto, Nariño',
-    fechaSiembra: '15 Mayo 2026',
-    estadoFitosanitario: 'alerta',
-    analisisCount: 4,
-    ultimaRevision: 'Hoy',
-  },
-  {
-    id: 'c-2',
-    nombre: 'Lote La Esperanza',
-    variedad: 'Papa Diacol Capiro',
-    hectareas: 4.0,
-    ubicacion: 'Ipiales, Nariño',
-    fechaSiembra: '02 Junio 2026',
-    estadoFitosanitario: 'optimo',
-    analisisCount: 2,
-    ultimaRevision: 'Hace 3 días',
-  },
-  {
-    id: 'c-3',
-    nombre: 'Parcela San Isidro',
-    variedad: 'Papa Criolla Colombia',
-    hectareas: 1.2,
-    ubicacion: 'Túquerres, Nariño',
-    fechaSiembra: '20 Junio 2026',
-    estadoFitosanitario: 'observacion',
-    analisisCount: 1,
-    ultimaRevision: 'Hace 1 semana',
-  },
-];
-
-const DEFAULT_HISTORIAL: Analisis[] = [
-  {
-    id: 'a-1',
-    cultivoId: 'c-1',
-    cultivoNombre: 'Finca El Porvenir',
-    fecha: '09 Sep 2026 - 10:24 AM',
-    imageUri: 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a',
-    diagnostico: 'Posible PMP',
-    estado: 'alerta',
-    severidad: 'moderada',
-    confianza: 92,
-    sintomas: [
-      'Pigmentación púrpura/rojiza en bordes de foliolos apicales',
-      'Hojas superiores erguidas y con curvatura hacia el haz',
-      'Engrosamiento en nudos de los tallos',
-    ],
-    recomendaciones: [
-      'Monitorear con trampas amarillas la presencia del psílido (Bactericera cockerelli).',
-      'Aislar o marcar las plantas con síntomas para evitar diseminación de fitoplasmas.',
-      'Consultar al agrónomo de confianza antes de realizar aplicaciones químicas.',
-    ],
-    notas: 'Detectado en el surco 4 del lote este.',
-  },
-  {
-    id: 'a-2',
-    cultivoId: 'c-1',
-    cultivoNombre: 'Finca El Porvenir',
-    fecha: '06 Sep 2026 - 04:15 PM',
-    imageUri: 'https://images.unsplash.com/photo-1592417817098-8f3d6910985c',
-    diagnostico: 'Sano',
-    estado: 'sano',
-    severidad: 'ninguna',
-    confianza: 98,
-    sintomas: ['Follaje vigoroso con coloración verde uniforme', 'Estructura foliar sin deformaciones'],
-    recomendaciones: [
-      'Continuar con el plan de fertirriego estándar.',
-      'Mantener el monitoreo preventivo semanal de plagas vectoras.',
-    ],
-    notas: 'Zona norte en perfecto estado.',
-  },
-  {
-    id: 'a-3',
-    cultivoId: 'c-2',
-    cultivoNombre: 'Lote La Esperanza',
-    fecha: '01 Sep 2026 - 09:30 AM',
-    imageUri: 'https://images.unsplash.com/photo-1589923188900-85dae523342b',
-    diagnostico: 'Sano',
-    estado: 'sano',
-    severidad: 'ninguna',
-    confianza: 95,
-    sintomas: ['Crecimiento vegetativo normal', 'Sin presencia de enrollamiento'],
-    recomendaciones: [
-      'Inspeccionar envés de hojas en busca de ninfas de psílidos.',
-    ],
-    notas: 'Cultivo Diacol Capiro en etapa de floración.',
-  },
-];
-
-const DEFAULT_PERFIL: Perfil = {
-  nombre: 'Carlos Pérez',
-  rol: 'Productor Papero',
-  fincaPrincipal: 'Finca El Porvenir',
-  ubicacion: 'Pasto, Nariño - Colombia',
-  telefono: '+57 315 892 4410',
-  email: 'carlos.perez@agropapa.com',
+const DEFAULT_PERFIL_AGRICULTOR: PerfilAgricultor = {
+  nombre: 'Mi Nombre (Agricultor)',
+  fincaPrincipal: 'Mi Parcela de Papa',
+  ubicacion: 'Municipio, Departamento',
+  telefono: '',
+  email: '',
   notificaciones: true,
   modoOffline: true,
+};
+
+const DEFAULT_PERFIL_TECNICO: PerfilTecnico = {
+  nombre: 'Ing. Agrónomo Fitosanitario',
+  registroProfesional: 'MP-04821',
+  especialidad: 'Sanidad Vegetal y Fitopatología',
+  entidad: 'Asistencia Técnica Agrícola',
+  telefono: '',
+  email: '',
+  notificaciones: true,
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [cultivos, setCultivos] = useState<Cultivo[]>(DEFAULT_CULTIVOS);
-  const [analisisHistorial, setAnalisisHistorial] = useState<Analisis[]>(DEFAULT_HISTORIAL);
-  const [perfil, setPerfil] = useState<Perfil>(DEFAULT_PERFIL);
-  const [selectedCultivoId, setSelectedCultivoId] = useState<string>('c-1');
+  const [rolActivo, setRolActivoState] = useState<RolUsuario>('agricultor');
+  const [cultivos, setCultivos] = useState<Cultivo[]>([]);
+  const [analisisHistorial, setAnalisisHistorial] = useState<Analisis[]>([]);
+  const [perfilAgricultor, setPerfilAgricultor] = useState<PerfilAgricultor>(DEFAULT_PERFIL_AGRICULTOR);
+  const [perfilTecnico, setPerfilTecnico] = useState<PerfilTecnico>(DEFAULT_PERFIL_TECNICO);
+  const [selectedCultivoId, setSelectedCultivoId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Cargar datos persistidos
+  // Cargar datos persistidos desde AsyncStorage de manera segura
   useEffect(() => {
     const loadStoredData = async () => {
       try {
+        const storedRol = await AsyncStorage.getItem(STORAGE_KEYS.ROL_ACTIVO);
         const storedCultivos = await AsyncStorage.getItem(STORAGE_KEYS.CULTIVOS);
         const storedHistorial = await AsyncStorage.getItem(STORAGE_KEYS.HISTORIAL);
-        const storedPerfil = await AsyncStorage.getItem(STORAGE_KEYS.PERFIL);
+        const storedPerfilAgr = await AsyncStorage.getItem(STORAGE_KEYS.PERFIL_AGRICULTOR);
+        const storedPerfilTec = await AsyncStorage.getItem(STORAGE_KEYS.PERFIL_TECNICO);
 
-        if (storedCultivos) setCultivos(JSON.parse(storedCultivos));
-        if (storedHistorial) setAnalisisHistorial(JSON.parse(storedHistorial));
-        if (storedPerfil) setPerfil(JSON.parse(storedPerfil));
+        if (storedRol === 'agricultor' || storedRol === 'tecnico') {
+          setRolActivoState(storedRol);
+        }
+
+        if (storedCultivos) {
+          const parsed = JSON.parse(storedCultivos);
+          if (Array.isArray(parsed)) {
+            setCultivos(parsed);
+            if (parsed.length > 0) setSelectedCultivoId(parsed[0].id);
+          }
+        }
+
+        if (storedHistorial) {
+          const parsedHist = JSON.parse(storedHistorial);
+          if (Array.isArray(parsedHist)) {
+            const sanitizado: Analisis[] = parsedHist.map((item: any) => ({
+              id: item.id || `a-${Date.now()}`,
+              cultivoId: item.cultivoId || 'lote-general',
+              cultivoNombre: item.cultivoNombre || 'Muestra de Campo',
+              fecha: item.fecha || 'Fecha no registrada',
+              imageUri: item.imageUri || 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a',
+              diagnostico: item.diagnostico || 'Posible PMP',
+              estado: item.estado || 'alerta',
+              severidad: item.severidad || 'moderada',
+              confianza: item.confianza || 90,
+              sintomas: Array.isArray(item.sintomas) ? item.sintomas : [],
+              recomendaciones: Array.isArray(item.recomendaciones) ? item.recomendaciones : [],
+              notas: item.notas || '',
+              estadoRevision: item.estadoRevision || 'sin_solicitar',
+              revisionTecnica: item.revisionTecnica || undefined,
+            }));
+            setAnalisisHistorial(sanitizado);
+          }
+        }
+
+        if (storedPerfilAgr) {
+          const parsedAgr = JSON.parse(storedPerfilAgr);
+          if (parsedAgr && typeof parsedAgr === 'object') {
+            setPerfilAgricultor({
+              ...DEFAULT_PERFIL_AGRICULTOR,
+              ...parsedAgr,
+              nombre: parsedAgr.nombre || DEFAULT_PERFIL_AGRICULTOR.nombre,
+            });
+          }
+        }
+
+        if (storedPerfilTec) {
+          const parsedTec = JSON.parse(storedPerfilTec);
+          if (parsedTec && typeof parsedTec === 'object') {
+            setPerfilTecnico({
+              ...DEFAULT_PERFIL_TECNICO,
+              ...parsedTec,
+              nombre: parsedTec.nombre || DEFAULT_PERFIL_TECNICO.nombre,
+              registroProfesional: parsedTec.registroProfesional || DEFAULT_PERFIL_TECNICO.registroProfesional,
+            });
+          }
+        }
       } catch (e) {
         console.warn('Error al cargar datos desde AsyncStorage:', e);
       } finally {
@@ -194,7 +204,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadStoredData();
   }, []);
 
-  // Guardar cultivos cuando cambien
+  // Cambiar rol y persistir de manera segura
+  const setRolActivo = async (rol: RolUsuario) => {
+    setRolActivoState(rol);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.ROL_ACTIVO, rol);
+    } catch (e) {
+      console.warn('Error al guardar rol:', e);
+    }
+  };
+
+  // Guardar cultivos
   const saveCultivos = async (newCultivos: Cultivo[]) => {
     try {
       setCultivos(newCultivos);
@@ -204,7 +224,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Guardar historial cuando cambie
+  // Guardar historial
   const saveHistorial = async (newHistorial: Analisis[]) => {
     try {
       setAnalisisHistorial(newHistorial);
@@ -214,18 +234,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Guardar perfil cuando cambie
-  const savePerfil = async (newPerfil: Perfil) => {
+  // Guardar perfil de agricultor
+  const updatePerfilAgricultor = async (datos: Partial<PerfilAgricultor>) => {
     try {
-      setPerfil(newPerfil);
-      await AsyncStorage.setItem(STORAGE_KEYS.PERFIL, JSON.stringify(newPerfil));
+      const updated: PerfilAgricultor = {
+        ...DEFAULT_PERFIL_AGRICULTOR,
+        ...perfilAgricultor,
+        ...datos,
+      };
+      setPerfilAgricultor(updated);
+      await AsyncStorage.setItem(STORAGE_KEYS.PERFIL_AGRICULTOR, JSON.stringify(updated));
     } catch (e) {
-      console.warn('Error al persistir perfil:', e);
+      console.warn('Error al persistir perfil agricultor:', e);
+    }
+  };
+
+  // Guardar perfil de técnico
+  const updatePerfilTecnico = async (datos: Partial<PerfilTecnico>) => {
+    try {
+      const updated: PerfilTecnico = {
+        ...DEFAULT_PERFIL_TECNICO,
+        ...perfilTecnico,
+        ...datos,
+      };
+      setPerfilTecnico(updated);
+      await AsyncStorage.setItem(STORAGE_KEYS.PERFIL_TECNICO, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Error al persistir perfil técnico:', e);
     }
   };
 
   // Agregar nuevo cultivo
-  const addCultivo = (cultivoData: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>) => {
+  const addCultivo = (cultivoData: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>): Cultivo => {
     const nuevo: Cultivo = {
       ...cultivoData,
       id: `c-${Date.now()}`,
@@ -234,6 +274,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     const updated = [nuevo, ...cultivos];
     saveCultivos(updated);
+    setSelectedCultivoId(nuevo.id);
+    return nuevo;
   };
 
   // Eliminar cultivo
@@ -242,11 +284,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveCultivos(updated);
     if (selectedCultivoId === id && updated.length > 0) {
       setSelectedCultivoId(updated[0].id);
+    } else if (updated.length === 0) {
+      setSelectedCultivoId('');
     }
   };
 
-  // Agregar nuevo análisis desde resultado de escaneo
-  const addAnalisis = (analisisData: Omit<Analisis, 'id' | 'fecha'>): Analisis => {
+  // Formateador de fecha amigable
+  const formatearFechaActual = () => {
     const now = new Date();
     const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const dia = String(now.getDate()).padStart(2, '0');
@@ -256,19 +300,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const minutos = String(now.getMinutes()).padStart(2, '0');
     const ampm = horas >= 12 ? 'PM' : 'AM';
     const hora12 = horas % 12 || 12;
+    return `${dia} ${mes} ${anio} - ${hora12}:${minutos} ${ampm}`;
+  };
 
-    const fechaFormateada = `${dia} ${mes} ${anio} - ${hora12}:${minutos} ${ampm}`;
-
+  // Agregar nuevo análisis desde resultado de escaneo
+  const addAnalisis = (analisisData: Omit<Analisis, 'id' | 'fecha'>): Analisis => {
     const nuevo: Analisis = {
       ...analisisData,
       id: `a-${Date.now()}`,
-      fecha: fechaFormateada,
+      fecha: formatearFechaActual(),
+      estadoRevision: analisisData.estadoRevision || 'sin_solicitar',
+      sintomas: analisisData.sintomas || [],
+      recomendaciones: analisisData.recomendaciones || [],
     };
 
     const updatedHistorial = [nuevo, ...analisisHistorial];
     saveHistorial(updatedHistorial);
 
-    // Actualizar estado y contador del cultivo asociado
+    // Actualizar estado del cultivo asociado si existe
     const updatedCultivos = cultivos.map((c) => {
       if (c.id === nuevo.cultivoId || c.nombre === nuevo.cultivoNombre) {
         return {
@@ -296,25 +345,166 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveHistorial(updated);
   };
 
-  // Actualizar perfil
-  const updatePerfil = (datos: Partial<Perfil>) => {
-    const updated: Perfil = { ...perfil, ...datos };
-    savePerfil(updated);
+  // Solicitar revisión técnica
+  const solicitarRevisionTecnica = (analisisId: string) => {
+    const updated = analisisHistorial.map((a) => {
+      if (a.id === analisisId) {
+        return {
+          ...a,
+          estadoRevision: 'pendiente' as const,
+        };
+      }
+      return a;
+    });
+    saveHistorial(updated);
+  };
+
+  // El técnico emite el dictamen oficial fitosanitario
+  const guardarRevisionTecnica = (
+    analisisId: string,
+    revision: Omit<RevisionTecnica, 'fechaRevision'>
+  ) => {
+    const revisionCompleta: RevisionTecnica = {
+      ...revision,
+      fechaRevision: formatearFechaActual(),
+    };
+
+    const updated = analisisHistorial.map((a) => {
+      if (a.id === analisisId) {
+        const esAlerta =
+          revisionCompleta.diagnosticoValidado === 'PMP Confirmado' ||
+          revisionCompleta.diagnosticoValidado === 'Sospecha Moderada';
+
+        return {
+          ...a,
+          estadoRevision: 'revisado' as const,
+          revisionTecnica: revisionCompleta,
+          estado: esAlerta ? ('alerta' as const) : ('sano' as const),
+        };
+      }
+      return a;
+    });
+    saveHistorial(updated);
+  };
+
+  // Cargar datos de demostración
+  const cargarDatosDemo = () => {
+    const demoCultivos: Cultivo[] = [
+      {
+        id: 'demo-c-1',
+        nombre: 'Lote El Porvenir',
+        variedad: 'Papa Pastusa Suprema',
+        hectareas: 2.5,
+        ubicacion: 'Pasto, Nariño',
+        fechaSiembra: '15 Mayo 2026',
+        estadoFitosanitario: 'alerta',
+        analisisCount: 1,
+        ultimaRevision: 'Hoy',
+      },
+      {
+        id: 'demo-c-2',
+        nombre: 'Finca La Esmeralda',
+        variedad: 'Papa Diacol Capiro',
+        hectareas: 3.0,
+        ubicacion: 'Ipiales, Nariño',
+        fechaSiembra: '01 Junio 2026',
+        estadoFitosanitario: 'optimo',
+        analisisCount: 1,
+        ultimaRevision: 'Ayer',
+      },
+    ];
+
+    const demoHistorial: Analisis[] = [
+      {
+        id: 'demo-a-1',
+        cultivoId: 'demo-c-1',
+        cultivoNombre: 'Lote El Porvenir',
+        fecha: '18 Sep 2026 - 10:30 AM',
+        imageUri: 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a',
+        diagnostico: 'Posible PMP',
+        estado: 'alerta',
+        severidad: 'moderada',
+        confianza: 92,
+        sintomas: [
+          'Coloración violácea en bordes de hojas superiores',
+          'Curvatura hacia arriba de los foliolos',
+          'Entrenudos cortos en el ápice',
+        ],
+        recomendaciones: [
+          'Instalar trampas amarillas para monitoreo de Bactericera cockerelli.',
+          'Solicitar confirmación técnica presencial.',
+        ],
+        estadoRevision: 'pendiente',
+        notas: 'Muestra tomada en surco 3.',
+      },
+      {
+        id: 'demo-a-2',
+        cultivoId: 'demo-c-2',
+        cultivoNombre: 'Finca La Esmeralda',
+        fecha: '12 Sep 2026 - 03:15 PM',
+        imageUri: 'https://images.unsplash.com/photo-1592417817098-8f3d6910985c',
+        diagnostico: 'Sano',
+        estado: 'sano',
+        severidad: 'ninguna',
+        confianza: 96,
+        sintomas: ['Follaje verde vigoroso sin enrollamiento'],
+        recomendaciones: ['Continuar con plan de monitoreo preventivo semanal.'],
+        estadoRevision: 'revisado',
+        revisionTecnica: {
+          tecnicoNombre: 'Ing. Mario Benavides',
+          registroProfesional: 'ICA-COL-9941',
+          fechaRevision: '13 Sep 2026 - 09:00 AM',
+          diagnosticoValidado: 'Descartado - Sano',
+          observaciones: 'Planta en excelente estado vegetativo, sin ninfas de psílidos en envés.',
+          tratamientoRecomendado: 'Mantener fertilización foliar balanceada y trampeo preventivo.',
+        },
+      },
+    ];
+
+    saveCultivos(demoCultivos);
+    saveHistorial(demoHistorial);
+  };
+
+  // Limpiar todos los datos locales
+  const limpiarTodosLosDatos = async () => {
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.CULTIVOS,
+        STORAGE_KEYS.HISTORIAL,
+        STORAGE_KEYS.PERFIL_AGRICULTOR,
+        STORAGE_KEYS.PERFIL_TECNICO,
+      ]);
+      setCultivos([]);
+      setAnalisisHistorial([]);
+      setSelectedCultivoId('');
+      setPerfilAgricultor(DEFAULT_PERFIL_AGRICULTOR);
+      setPerfilTecnico(DEFAULT_PERFIL_TECNICO);
+    } catch (e) {
+      console.warn('Error al limpiar datos:', e);
+    }
   };
 
   return (
     <AppContext.Provider
       value={{
+        rolActivo,
+        setRolActivo,
         cultivos,
         analisisHistorial,
-        perfil,
+        perfilAgricultor,
+        perfilTecnico,
         selectedCultivoId,
         setSelectedCultivoId,
         addCultivo,
         deleteCultivo,
         addAnalisis,
         deleteAnalisis,
-        updatePerfil,
+        solicitarRevisionTecnica,
+        guardarRevisionTecnica,
+        updatePerfilAgricultor,
+        updatePerfilTecnico,
+        cargarDatosDemo,
+        limpiarTodosLosDatos,
         isLoading,
       }}>
       {children}

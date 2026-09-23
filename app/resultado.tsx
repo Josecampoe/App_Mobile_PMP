@@ -23,25 +23,25 @@ export default function ResultadoScreen() {
   // Obtener nombre del cultivo
   const targetCultivo =
     cultivos.find((c) => c.id === cultivoId) ||
-    cultivos[0] || { id: 'c-1', nombre: cultivoNombre || 'Finca El Porvenir' };
+    cultivos[0] || { id: 'lote-general', nombre: cultivoNombre || 'Muestra de Campo' };
 
   const finalCultivoNombre = cultivoNombre || targetCultivo.nombre;
   const finalCultivoId = cultivoId || targetCultivo.id;
 
   const sintomasDetectados = [
-    'Pigmentación púrpura / amarillenta en bordes foliares apicales',
-    'Foliolos erguidos con enrollamiento hacia el haz',
-    'Ligero engrosamiento en nudos de los tallos superiores',
+    'Coloración rojiza/púrpura en foliolos apicales superiores',
+    'Foliolos con enrollamiento hacia el haz (formación en cuchara)',
+    'Acortamiento de entrenudos y engrosamiento leve en nudos',
   ];
 
   const recomendacionesAgro = [
-    'Colocar trampas cromáticas amarillas para monitorear el psílido vector (Bactericera cockerelli).',
+    'Instalar trampas cromáticas amarillas perimetrales para capturar el psílido vector (Bactericera cockerelli).',
     'Aislar e inspeccionar las plantas adyacentes en un radio de 5 a 10 metros.',
-    'No emplear tubérculos de lotes afectados como material de siembra (semilla).',
-    'Consultar de inmediato a un agrónomo para evaluar control biológico o foliar.',
+    'No emplear tubérculos de lotes sospechosos como semilla para futuros ciclos.',
+    'Solicitar dictamen técnico a un agrónomo para formular plan de control fitosanitario.',
   ];
 
-  const handleGuardarAnalisis = () => {
+  const handleGuardar = (solicitarRevision: boolean) => {
     try {
       setIsSaving(true);
       addAnalisis({
@@ -54,19 +54,33 @@ export default function ResultadoScreen() {
         confianza: 91,
         sintomas: sintomasDetectados,
         recomendaciones: recomendacionesAgro,
-        notas: `Análisis fitosanitario preventivo realizado en ${finalCultivoNombre}.`,
+        estadoRevision: solicitarRevision ? 'pendiente' : 'sin_solicitar',
+        notas: `Análisis fitosanitario en ${finalCultivoNombre}.`,
       });
 
-      Alert.alert(
-        '¡Análisis Guardado!',
-        `El diagnóstico ha sido vinculado exitosamente a ${finalCultivoNombre} y registrado en tu historial.`,
-        [
-          {
-            text: 'Ver en Historial',
-            onPress: () => router.push('/(tabs)/historial'),
-          },
-        ]
-      );
+      if (solicitarRevision) {
+        Alert.alert(
+          '¡Guardado y Enviado a Revisión!',
+          `El análisis de ${finalCultivoNombre} ha sido guardado y remitido a la bandeja del Técnico Agrónomo para su dictamen oficial.`,
+          [
+            {
+              text: 'Ver en Historial',
+              onPress: () => router.push('/(tabs)/historial'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          '¡Análisis Guardado!',
+          `El diagnóstico quedó registrado en tu historial personal de ${finalCultivoNombre}.`,
+          [
+            {
+              text: 'Ver en Historial',
+              onPress: () => router.push('/(tabs)/historial'),
+            },
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error al guardar análisis:', error);
       Alert.alert('Error', 'No se pudo guardar el análisis. Inténtalo nuevamente.');
@@ -93,7 +107,7 @@ export default function ResultadoScreen() {
 
       {/* 2. CONTENIDO PRINCIPAL */}
       <ScrollView className="flex-1 px-4 pt-4 pb-12" showsVerticalScrollIndicator={false}>
-        {/* 3. MINIATURA DE LA FOTO CAPTURADA */}
+        {/* Foto capturada */}
         <View className="h-52 w-full rounded-2xl overflow-hidden relative shadow-sm border border-gray-200 mb-5 bg-gray-900">
           <ImageBackground
             source={{ uri: displayImageUri }}
@@ -111,7 +125,7 @@ export default function ResultadoScreen() {
           </ImageBackground>
         </View>
 
-        {/* 4. TARJETA DE RESULTADO DE DIAGNÓSTICO */}
+        {/* Tarjeta de diagnóstico */}
         <View className="bg-[#FFFDE7] border-2 border-[#F9A825] rounded-2xl p-5 items-center shadow-sm relative overflow-hidden mb-4">
           <Text className="text-4xl mb-2">⚠️</Text>
           <Text className="text-[#D97706] font-black text-xl text-center mb-1">
@@ -119,16 +133,16 @@ export default function ResultadoScreen() {
           </Text>
           <View className="bg-[#F9A825]/20 px-3 py-0.5 rounded-full mb-3">
             <Text className="text-xs font-bold text-[#B45309]">
-              91% Nivel de Coincidencia
+              91% Nivel de Coincidencia Visual
             </Text>
           </View>
           <Text className="text-gray-700 text-center text-xs leading-relaxed">
             Se detectaron patrones morfológicos y pigmentarios en los brotes foliares compatibles con
-            Punta Morada de la Papa (PMP).
+            Punta Morada de la Papa (PMP). Puedes solicitar una revisión técnica oficial a un agrónomo.
           </Text>
         </View>
 
-        {/* 5. SÍNTOMAS DETECTADOS */}
+        {/* Síntomas detectados */}
         <View className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
           <View className="flex-row items-center mb-2.5">
             <FontAwesome name="check-square-o" size={15} color="#2E7D32" />
@@ -144,12 +158,12 @@ export default function ResultadoScreen() {
           ))}
         </View>
 
-        {/* 6. TARJETA DE RECOMENDACIÓN AGRONÓMICA */}
+        {/* Recomendaciones preliminares */}
         <View className="bg-white rounded-2xl p-4 shadow-sm border border-emerald-100 mb-6">
           <View className="flex-row items-center mb-2.5">
             <FontAwesome name="lightbulb-o" size={16} color="#2E7D32" />
             <Text className="font-bold text-[#2E7D32] text-xs uppercase ml-2">
-              Protocolo Recomendado (ICA / FAO)
+              Medidas Preventivas Inmediatas
             </Text>
           </View>
           {recomendacionesAgro.map((rec, idx) => (
@@ -161,24 +175,35 @@ export default function ResultadoScreen() {
         </View>
       </ScrollView>
 
-      {/* 7. BOTONES DE ACCIÓN (Fixed Bottom) */}
+      {/* 3. BOTONES DE ACCIÓN */}
       <View className="bg-white p-4 border-t border-gray-100 shrink-0 pb-7 shadow-lg">
-        {/* Botón Principal Guardar */}
+        {/* Opción 1: Guardar y solicitar revisión técnica */}
         <TouchableOpacity
-          onPress={handleGuardarAnalisis}
+          onPress={() => handleGuardar(true)}
           disabled={isSaving}
-          className="bg-[#2E7D32] rounded-xl p-3.5 flex-row items-center justify-center shadow-md active:scale-95 mb-2.5">
-          <FontAwesome name="save" size={18} color="white" />
-          <Text className="text-white font-bold ml-2 text-sm">
-            {isSaving ? 'GUARDANDO...' : 'GUARDAR ESTE ANÁLISIS'}
+          className="bg-[#1565C0] rounded-xl p-3.5 flex-row items-center justify-center shadow-md active:scale-95 mb-2.5">
+          <FontAwesome name="paper-plane" size={16} color="white" />
+          <Text className="text-white font-bold ml-2 text-xs">
+            {isSaving ? 'GUARDANDO...' : 'GUARDAR Y SOLICITAR REVISIÓN TÉCNICA'}
           </Text>
         </TouchableOpacity>
 
-        {/* Botón Secundario Descartar */}
+        {/* Opción 2: Guardar solo en historial personal */}
+        <TouchableOpacity
+          onPress={() => handleGuardar(false)}
+          disabled={isSaving}
+          className="bg-[#2E7D32] rounded-xl p-3 flex-row items-center justify-center shadow-sm active:scale-95 mb-2">
+          <FontAwesome name="save" size={16} color="white" />
+          <Text className="text-white font-bold ml-2 text-xs">
+            Guardar solo en mi historial
+          </Text>
+        </TouchableOpacity>
+
+        {/* Descartar */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="bg-transparent p-2.5 border border-gray-200 rounded-xl items-center active:scale-95">
-          <Text className="text-gray-500 font-semibold text-xs">Descartar y analizar otra</Text>
+          className="p-2 items-center active:scale-95">
+          <Text className="text-gray-500 font-semibold text-xs">Descartar y tomar otra</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
