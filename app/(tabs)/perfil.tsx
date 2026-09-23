@@ -10,10 +10,13 @@ import {
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 import RoleSelector from '../../components/RoleSelector';
 
 export default function PerfilScreen() {
+  const router = useRouter();
   const {
     rolActivo,
     perfilAgricultor,
@@ -25,6 +28,24 @@ export default function PerfilScreen() {
     limpiarTodosLosDatos,
     cargarDatosDemo,
   } = useApp();
+
+  const handleCerrarSesion = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar tu sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.auth.signOut();
+            router.replace('/auth/login');
+          },
+        },
+      ]
+    );
+  };
 
   // Estados de edición Agricultor con fallbacks seguros
   const [modalEditAgr, setModalEditAgr] = useState(false);
@@ -363,6 +384,16 @@ export default function PerfilScreen() {
             <FontAwesome name="chevron-right" size={11} color="#DC2626" />
           </TouchableOpacity>
         </View>
+
+        {/* BOTÓN CERRAR SESIÓN */}
+        <TouchableOpacity
+          onPress={handleCerrarSesion}
+          className="mb-4 p-3.5 rounded-2xl bg-red-600 items-center shadow-sm active:scale-95">
+          <View className="flex-row items-center">
+            <FontAwesome name="sign-out" size={16} color="white" />
+            <Text className="text-white font-bold text-sm ml-2">Cerrar Sesión</Text>
+          </View>
+        </TouchableOpacity>
 
         <Text className="text-center text-[11px] text-gray-400 mb-6">
           PMP Smart v2.0 · Plataforma de Monitoreo y Dictamen Fitosanitario
