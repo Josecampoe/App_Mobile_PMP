@@ -10,14 +10,12 @@ export default function RoleSelector() {
       <TouchableOpacity
         onPress={() => setRolActivo('agricultor')}
         activeOpacity={0.8}
-        className={`flex-1 py-1.5 px-3 rounded-xl flex-row items-center justify-center ${
-          rolActivo === 'agricultor' ? 'bg-[#2E7D32]' : 'bg-transparent'
-        }`}>
+        className={`flex-1 py-1.5 px-3 rounded-xl flex-row items-center justify-center ${rolActivo === 'agricultor' ? 'bg-[#2E7D32]' : 'bg-transparent'
+          }`}>
         <Text className="text-xs mr-1">👨‍🌾</Text>
         <Text
-          className={`text-xs font-bold ${
-            rolActivo === 'agricultor' ? 'text-white' : 'text-gray-600'
-          }`}>
+          className={`text-xs font-bold ${rolActivo === 'agricultor' ? 'text-white' : 'text-gray-600'
+            }`}>
           Agricultor
         </Text>
       </TouchableOpacity>
@@ -25,14 +23,12 @@ export default function RoleSelector() {
       <TouchableOpacity
         onPress={() => setRolActivo('tecnico')}
         activeOpacity={0.8}
-        className={`flex-1 py-1.5 px-3 rounded-xl flex-row items-center justify-center ${
-          rolActivo === 'tecnico' ? 'bg-[#1565C0]' : 'bg-transparent'
-        }`}>
+        className={`flex-1 py-1.5 px-3 rounded-xl flex-row items-center justify-center ${rolActivo === 'tecnico' ? 'bg-[#1565C0]' : 'bg-transparent'
+          }`}>
         <Text className="text-xs mr-1">🔬</Text>
         <Text
-          className={`text-xs font-bold ${
-            rolActivo === 'tecnico' ? 'text-white' : 'text-gray-600'
-          }`}>
+          className={`text-xs font-bold ${rolActivo === 'tecnico' ? 'text-white' : 'text-gray-600'
+            }`}>
           Técnico Agrónomo
         </Text>
       </TouchableOpacity>

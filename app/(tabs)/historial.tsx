@@ -13,7 +13,6 @@ import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, Analisis, RevisionTecnica } from '../../context/AppContext';
-import RoleSelector from '../../components/RoleSelector';
 
 const OPCIONES_DIAGNOSTICO_TECNICO: RevisionTecnica['diagnosticoValidado'][] = [
   'PMP Confirmado',

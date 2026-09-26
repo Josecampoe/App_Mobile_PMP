@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp, Cultivo } from '../../context/AppContext';
-import RoleSelector from '../../components/RoleSelector';
+
 
 const VARIEDADES_PAPA = [
   'Papa Pastusa Suprema',

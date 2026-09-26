@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
 import { authApi } from '../../lib/api';
-import RoleSelector from '../../components/RoleSelector';
+
 
 export default function PerfilScreen() {
   const router = useRouter();
