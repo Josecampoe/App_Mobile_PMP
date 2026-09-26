@@ -178,8 +178,6 @@ export default function PerfilScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* SELECTOR DE ROL */}
-        <RoleSelector />
       </View>
 
       <ScrollView className="flex-1 px-4 pt-4 pb-20" showsVerticalScrollIndicator={false}>

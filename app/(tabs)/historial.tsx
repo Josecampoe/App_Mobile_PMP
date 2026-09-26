@@ -166,8 +166,6 @@ export default function Historial() {
           )}
         </View>
 
-        {/* SELECTOR DE ROL */}
-        <RoleSelector />
       </View>
 
       <ScrollView className="flex-1 px-4 pt-3 pb-24" showsVerticalScrollIndicator={false}>

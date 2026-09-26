@@ -192,8 +192,11 @@ export default function CameraScreen() {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
-        flash={flash}>
-        <SafeAreaView className="flex-1 justify-between">
+        flash={flash}
+        autofocus="on"
+        enableTorch={flash === 'on'}
+      />
+      <SafeAreaView className="absolute w-full h-full justify-between" pointerEvents="box-none">
           {/* Barra superior */}
           <View className="bg-black/40 px-4 py-3 flex-row justify-between items-center backdrop-blur-md">
             <TouchableOpacity
@@ -284,7 +287,6 @@ export default function CameraScreen() {
             </View>
           </View>
         </SafeAreaView>
-      </CameraView>
 
       {/* MODAL: SELECCIONAR O CREAR PARCELA */}
       <Modal visible={selectorVisible} transparent animationType="fade">

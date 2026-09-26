@@ -295,7 +295,42 @@ export const cultivosApi = {
 // API de Análisis
 // ============================================================
 
+
 export const analisisApi = {
+  async procesar(imageUri: string): Promise<ApiResponse<any>> {
+    try {
+      // Intentar limpiar la URL para Android si es necesario
+      const cleanUri = decodeURIComponent(imageUri);
+      
+      // En React Native, fetch soporta leer archivos locales y es más confiable que FileSystem en Expo Go Android
+      const response = await fetch(cleanUri);
+      const blob = await response.blob();
+      
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            // El resultado es "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+            const b64 = reader.result.split(',')[1];
+            resolve(b64);
+          } else {
+            reject(new Error('FileReader no retornó un string'));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      
+      return apiFetch<any>('/api/analisis/procesar', {
+        method: 'POST',
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+    } catch (e: any) {
+      console.warn('Error convirtiendo imagen a base64:', e.message);
+      return { success: false, error: 'Error procesando la imagen localmente.' };
+    }
+  },
+
   async list(): Promise<ApiResponse<Analisis[]>> {
     return apiFetch<Analisis[]>('/api/analisis');
   },

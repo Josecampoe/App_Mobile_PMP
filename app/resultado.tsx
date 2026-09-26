@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ImageBackground, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, ImageBackground, Alert, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../context/AppContext';
+import { analisisApi } from '../lib/api';
 
 export default function ResultadoScreen() {
   const router = useRouter();
@@ -17,8 +18,7 @@ export default function ResultadoScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   // Imagen capturada o de respaldo
-  const displayImageUri =
-    imageUri || 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a';
+  const displayImageUri = imageUri || 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a';
 
   // Obtener nombre del cultivo
   const targetCultivo =
@@ -28,18 +28,43 @@ export default function ResultadoScreen() {
   const finalCultivoNombre = cultivoNombre || targetCultivo.nombre;
   const finalCultivoId = cultivoId || targetCultivo.id;
 
-  const sintomasDetectados = [
+  const [isProcessing, setIsProcessing] = useState(true);
+  const [aiData, setAiData] = useState<any>(null);
+
+  useEffect(() => {
+    const procesarIA = async () => {
+      try {
+        const res = await analisisApi.procesar(displayImageUri);
+        if (res.success && res.data) {
+          setAiData(res.data);
+        } else {
+          Alert.alert('Aviso', 'La IA no pudo procesar la imagen, se usarán datos por defecto.');
+        }
+      } catch (err) {
+        Alert.alert('Error', 'Problema de conexión con la IA.');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    procesarIA();
+  }, []);
+
+  const sintomasDetectados = aiData?.sintomas || [
     'Coloración rojiza/púrpura en foliolos apicales superiores',
     'Foliolos con enrollamiento hacia el haz (formación en cuchara)',
     'Acortamiento de entrenudos y engrosamiento leve en nudos',
   ];
 
-  const recomendacionesAgro = [
+  const recomendacionesAgro = aiData?.recomendaciones || [
     'Instalar trampas cromáticas amarillas perimetrales para capturar el psílido vector (Bactericera cockerelli).',
     'Aislar e inspeccionar las plantas adyacentes en un radio de 5 a 10 metros.',
     'No emplear tubérculos de lotes sospechosos como semilla para futuros ciclos.',
     'Solicitar dictamen técnico a un agrónomo para formular plan de control fitosanitario.',
   ];
+
+  const diagnosticoTexto = aiData?.diagnostico || 'POSIBLE PMP';
+  const confianzaNum = aiData?.confianza || 91;
+  const estadoVisual = aiData?.estado || 'alerta';
 
   const handleGuardar = (solicitarRevision: boolean) => {
     try {
@@ -48,10 +73,10 @@ export default function ResultadoScreen() {
         cultivoId: finalCultivoId,
         cultivoNombre: finalCultivoNombre,
         imageUri: displayImageUri,
-        diagnostico: 'Posible PMP',
-        estado: 'alerta',
-        severidad: 'moderada',
-        confianza: 91,
+        diagnostico: diagnosticoTexto,
+        estado: estadoVisual,
+        severidad: aiData?.severidad || 'moderada',
+        confianza: confianzaNum,
         sintomas: sintomasDetectados,
         recomendaciones: recomendacionesAgro,
         estadoRevision: solicitarRevision ? 'pendiente' : 'sin_solicitar',
@@ -125,22 +150,43 @@ export default function ResultadoScreen() {
           </ImageBackground>
         </View>
 
-        {/* Tarjeta de diagnóstico */}
-        <View className="bg-[#FFFDE7] border-2 border-[#F9A825] rounded-2xl p-5 items-center shadow-sm relative overflow-hidden mb-4">
-          <Text className="text-4xl mb-2">⚠️</Text>
-          <Text className="text-[#D97706] font-black text-xl text-center mb-1">
-            POSIBLE PUNTA MORADA
-          </Text>
-          <View className="bg-[#F9A825]/20 px-3 py-0.5 rounded-full mb-3">
-            <Text className="text-xs font-bold text-[#B45309]">
-              91% Nivel de Coincidencia Visual
+        {/* Loading IA o Tarjeta de diagnóstico */}
+        {isProcessing ? (
+          <View className="bg-white border border-gray-200 rounded-2xl p-6 items-center shadow-sm mb-4">
+            <ActivityIndicator size="large" color="#2E7D32" />
+            <Text className="text-[#2E7D32] font-bold mt-4 text-center">
+              Inteligencia Artificial Analizando...
+            </Text>
+            <Text className="text-gray-500 text-xs text-center mt-1">
+              Buscando patrones de Punta Morada en la imagen
             </Text>
           </View>
-          <Text className="text-gray-700 text-center text-xs leading-relaxed">
-            Se detectaron patrones morfológicos y pigmentarios en los brotes foliares compatibles con
-            Punta Morada de la Papa (PMP). Puedes solicitar una revisión técnica oficial a un agrónomo.
-          </Text>
-        </View>
+        ) : (
+          <View className={`border-2 rounded-2xl p-5 items-center shadow-sm relative overflow-hidden mb-4 ${
+            estadoVisual === 'alerta' ? 'bg-[#FFFDE7] border-[#F9A825]' : 'bg-emerald-50 border-emerald-400'
+          }`}>
+            <Text className="text-4xl mb-2">{estadoVisual === 'alerta' ? '⚠️' : '✅'}</Text>
+            <Text className={`font-black text-xl text-center mb-1 uppercase ${
+              estadoVisual === 'alerta' ? 'text-[#D97706]' : 'text-[#2E7D32]'
+            }`}>
+              {diagnosticoTexto}
+            </Text>
+            <View className={`${
+              estadoVisual === 'alerta' ? 'bg-[#F9A825]/20' : 'bg-emerald-200'
+            } px-3 py-0.5 rounded-full mb-3`}>
+              <Text className={`text-xs font-bold ${
+                estadoVisual === 'alerta' ? 'text-[#B45309]' : 'text-emerald-800'
+              }`}>
+                {confianzaNum}% Nivel de Coincidencia Visual
+              </Text>
+            </View>
+            <Text className="text-gray-700 text-center text-xs leading-relaxed">
+              {estadoVisual === 'alerta' 
+                ? 'Se detectaron patrones morfológicos y pigmentarios en los brotes foliares compatibles con Punta Morada de la Papa (PMP). Puedes solicitar una revisión técnica oficial a un agrónomo.'
+                : 'No se detectaron patrones evidentes de Punta Morada. Sin embargo, mantén el monitoreo periódico del cultivo.'}
+            </Text>
+          </View>
+        )}
 
         {/* Síntomas detectados */}
         <View className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
@@ -150,7 +196,7 @@ export default function ResultadoScreen() {
               Patrones Visuales Identificados
             </Text>
           </View>
-          {sintomasDetectados.map((sintoma, idx) => (
+          {sintomasDetectados.map((sintoma: string, idx: number) => (
             <View key={idx} className="flex-row items-start mb-2">
               <View className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 mr-2" />
               <Text className="text-xs text-gray-700 flex-1 leading-normal">{sintoma}</Text>
@@ -166,7 +212,7 @@ export default function ResultadoScreen() {
               Medidas Preventivas Inmediatas
             </Text>
           </View>
-          {recomendacionesAgro.map((rec, idx) => (
+          {recomendacionesAgro.map((rec: string, idx: number) => (
             <View key={idx} className="flex-row items-start mb-2">
               <Text className="text-xs font-bold text-[#2E7D32] mr-2">{idx + 1}.</Text>
               <Text className="text-xs text-gray-600 flex-1 leading-normal">{rec}</Text>
@@ -180,8 +226,10 @@ export default function ResultadoScreen() {
         {/* Opción 1: Guardar y solicitar revisión técnica */}
         <TouchableOpacity
           onPress={() => handleGuardar(true)}
-          disabled={isSaving}
-          className="bg-[#1565C0] rounded-xl p-3.5 flex-row items-center justify-center shadow-md active:scale-95 mb-2.5">
+          disabled={isSaving || isProcessing}
+          className={`bg-[#1565C0] rounded-xl p-3.5 flex-row items-center justify-center shadow-md active:scale-95 mb-2.5 ${
+            isSaving || isProcessing ? 'opacity-50' : ''
+          }`}>
           <FontAwesome name="paper-plane" size={16} color="white" />
           <Text className="text-white font-bold ml-2 text-xs">
             {isSaving ? 'GUARDANDO...' : 'GUARDAR Y SOLICITAR REVISIÓN TÉCNICA'}
@@ -191,8 +239,10 @@ export default function ResultadoScreen() {
         {/* Opción 2: Guardar solo en historial personal */}
         <TouchableOpacity
           onPress={() => handleGuardar(false)}
-          disabled={isSaving}
-          className="bg-[#2E7D32] rounded-xl p-3 flex-row items-center justify-center shadow-sm active:scale-95 mb-2">
+          disabled={isSaving || isProcessing}
+          className={`bg-[#2E7D32] rounded-xl p-3 flex-row items-center justify-center shadow-sm active:scale-95 mb-2 ${
+            isSaving || isProcessing ? 'opacity-50' : ''
+          }`}>
           <FontAwesome name="save" size={16} color="white" />
           <Text className="text-white font-bold ml-2 text-xs">
             Guardar solo en mi historial
@@ -202,7 +252,10 @@ export default function ResultadoScreen() {
         {/* Descartar */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="p-2 items-center active:scale-95">
+          disabled={isSaving || isProcessing}
+          className={`p-2 items-center active:scale-95 ${
+            isSaving || isProcessing ? 'opacity-50' : ''
+          }`}>
           <Text className="text-gray-500 font-semibold text-xs">Descartar y tomar otra</Text>
         </TouchableOpacity>
       </View>
