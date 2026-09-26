@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../context/AppContext';
-import RoleSelector from '../../components/RoleSelector';
+import { vinculosApi } from '../../lib/api';
 
 export default function Inicio() {
   const router = useRouter();
@@ -33,12 +33,49 @@ export default function Inicio() {
   const [hectareasLote, setHectareasLote] = useState('');
   const [ubicacionLote, setUbicacionLote] = useState('');
 
+  // Modales vinculación
+  const [modalCodigo, setModalCodigo] = useState(false);
+  const [codigoGenerado, setCodigoGenerado] = useState('');
+  const [modalVincular, setModalVincular] = useState(false);
+  const [codigoInput, setCodigoInput] = useState('');
+
   // Saludo dinámico según la hora
   const getSaludo = () => {
     const hora = new Date().getHours();
     if (hora < 12) return 'Buenos días';
     if (hora < 18) return 'Buenas tardes';
     return 'Buenas noches';
+  };
+
+  const handleGenerarCodigo = async () => {
+    try {
+      const res = await vinculosApi.generarCodigo();
+      if (res.success && res.data) {
+        setCodigoGenerado(res.data.codigo);
+        setModalCodigo(true);
+      } else {
+        Alert.alert('Error', res.error || 'No se pudo generar el código');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Problema de conexión');
+    }
+  };
+
+  const handleVincular = async () => {
+    if (!codigoInput.trim()) return Alert.alert('Error', 'Ingresa el código');
+    try {
+      const res = await vinculosApi.vincular(codigoInput.trim().toUpperCase());
+      if (res.success && res.data) {
+        Alert.alert('Éxito', `Vinculado con agricultor: ${res.data.agricultorNombre}`);
+        setModalVincular(false);
+        setCodigoInput('');
+        // Recargar datos si es necesario (el contexto puede tener un refreshData)
+      } else {
+        Alert.alert('Error', res.error || 'Código inválido');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Problema de conexión');
+    }
   };
 
   // KPIs seguros
@@ -117,9 +154,6 @@ export default function Inicio() {
             <Text className="text-xs font-bold text-gray-700 ml-1.5">{nombreUsuarioHeader}</Text>
           </TouchableOpacity>
         </View>
-
-        {/* SELECTOR DE ROL RÁPIDO */}
-        <RoleSelector />
       </View>
 
       {/* 2. CONTENIDO PRINCIPAL */}
@@ -172,6 +206,14 @@ export default function Inicio() {
               <Text className="text-[#E8F5E9] text-xs text-center mt-0.5">
                 Toma o sube una fotografía real para revisar signos de Punta Morada
               </Text>
+            </TouchableOpacity>
+
+            {/* BOTÓN PARA COMPARTIR CON TÉCNICO */}
+            <TouchableOpacity
+              onPress={handleGenerarCodigo}
+              className="w-full bg-white border border-[#2E7D32] rounded-2xl p-4 flex-row items-center justify-center shadow-sm mb-5 active:scale-98">
+              <FontAwesome name="share-alt" size={16} color="#2E7D32" />
+              <Text className="text-[#2E7D32] font-bold ml-2">Compartir con Técnico</Text>
             </TouchableOpacity>
 
             {/* ALERTA DE DICTAMEN DE AGRÓNOMO DISPONIBLE */}
@@ -430,6 +472,16 @@ export default function Inicio() {
               </Text>
             </TouchableOpacity>
 
+            {/* VINCULAR AGRICULTOR */}
+            <TouchableOpacity
+              onPress={() => setModalVincular(true)}
+              className="bg-white border border-[#1565C0] py-3.5 rounded-xl flex-row items-center justify-center shadow-sm active:scale-95 mb-6">
+              <FontAwesome name="user-plus" size={14} color="#1565C0" />
+              <Text className="text-[#1565C0] text-xs font-bold ml-2">
+                Vincular Agricultor (Código)
+              </Text>
+            </TouchableOpacity>
+
             {/* GUÍA TÉCNICA RÁPIDA PARA EL AGÓNOMO */}
             <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm mb-6">
               <Text className="text-xs font-bold text-gray-700 uppercase mb-2">
@@ -511,6 +563,61 @@ export default function Inicio() {
                 <Text className="text-white font-bold text-xs">Guardar Parcela</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL CÓDIGO AGRICULTOR */}
+      <Modal visible={modalCodigo} animationType="fade" transparent>
+        <View className="flex-1 bg-black/60 justify-center items-center px-5">
+          <View className="bg-white rounded-2xl w-full p-6 items-center">
+            <View className="w-12 h-12 rounded-full bg-emerald-100 items-center justify-center mb-4">
+              <FontAwesome name="shield" size={24} color="#2E7D32" />
+            </View>
+            <Text className="text-lg font-bold text-gray-800 mb-2">Código de Acceso</Text>
+            <Text className="text-xs text-gray-500 text-center mb-5">
+              Comparte este código con tu técnico agrónomo para que pueda revisar tus análisis. El código expira en 24 horas.
+            </Text>
+            <View className="bg-gray-100 px-6 py-4 rounded-xl mb-6 w-full">
+              <Text className="text-3xl font-black text-center tracking-widest text-[#2E7D32]">
+                {codigoGenerado}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setModalCodigo(false)}
+              className="bg-[#2E7D32] w-full py-3 rounded-xl items-center">
+              <Text className="text-white font-bold">Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL VINCULAR TÉCNICO */}
+      <Modal visible={modalVincular} animationType="slide" transparent>
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white rounded-t-3xl p-6">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-lg font-bold text-[#1565C0]">Vincular Agricultor</Text>
+              <TouchableOpacity onPress={() => setModalVincular(false)}>
+                <FontAwesome name="times" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-sm text-gray-600 mb-4">
+              Ingresa el código de 6 caracteres proporcionado por el agricultor.
+            </Text>
+            <TextInput
+              value={codigoInput}
+              onChangeText={setCodigoInput}
+              placeholder="Ej: A7B9X2"
+              autoCapitalize="characters"
+              maxLength={6}
+              className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-lg font-bold text-center tracking-widest text-[#1565C0] mb-6"
+            />
+            <TouchableOpacity
+              onPress={handleVincular}
+              className="bg-[#1565C0] w-full py-3.5 rounded-xl items-center shadow-sm">
+              <Text className="text-white font-bold">Verificar Código</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

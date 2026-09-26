@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
+import { authApi } from '../../lib/api';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -29,25 +29,15 @@ export default function LoginScreen() {
     }
 
     setIsLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
+    const result = await authApi.login(email.trim(), password);
     setIsLoading(false);
 
-    if (error) {
-      let msg = 'No se pudo iniciar sesión.';
-      if (error.message.includes('Invalid login credentials')) {
-        msg = 'Correo o contraseña incorrectos. Verifica tus datos.';
-      } else if (error.message.includes('Email not confirmed')) {
-        msg = 'Confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.';
-      }
-      Alert.alert('Error de Acceso', msg);
+    if (!result.success) {
+      Alert.alert('Error de Acceso', result.error || 'No se pudo iniciar sesión.');
       return;
     }
 
-    // La redirección se maneja automáticamente en _layout.tsx al detectar sesión
+    // Redirigir a la app principal
     router.replace('/(tabs)');
   };
 

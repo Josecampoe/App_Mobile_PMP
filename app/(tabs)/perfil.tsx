@@ -12,7 +12,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
-import { supabase } from '../../lib/supabase';
+import { authApi } from '../../lib/api';
 import RoleSelector from '../../components/RoleSelector';
 
 export default function PerfilScreen() {
@@ -39,7 +39,7 @@ export default function PerfilScreen() {
           text: 'Cerrar Sesión',
           style: 'destructive',
           onPress: async () => {
-            await supabase.auth.signOut();
+            await authApi.logout();
             router.replace('/auth/login');
           },
         },

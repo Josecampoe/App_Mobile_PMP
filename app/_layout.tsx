@@ -3,45 +3,57 @@ import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AppProvider } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
-import type { Session } from '@supabase/supabase-js';
+import { getAccessToken, authApi, authEvents } from '../lib/api';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // Obtener sesión actual al iniciar
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    // Verificar si hay un token válido al iniciar
+    checkAuth();
+
+    // Escuchar eventos de login/registro/logout
+    const unsubscribe = authEvents.subscribe((isAuth) => {
+      setIsAuthenticated(isAuth);
       setIsLoading(false);
     });
 
-    // Escuchar cambios de autenticación
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return unsubscribe;
   }, []);
 
+  const checkAuth = async () => {
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        // Verificar que el token siga siendo válido
+        const isValid = await authApi.isAuthenticated();
+        setIsAuthenticated(isValid);
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch {
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isAuthenticated === null) return;
 
     const inAuthGroup = segments[0] === 'auth';
 
-    if (!session && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup) {
       // No hay sesión y no está en pantallas de auth → redirigir al login
       router.replace('/auth/login');
-    } else if (session && inAuthGroup) {
+    } else if (isAuthenticated && inAuthGroup) {
       // Hay sesión y está en pantallas de auth → redirigir a la app
       router.replace('/(tabs)');
     }
-  }, [session, segments, isLoading]);
+  }, [isAuthenticated, segments, isLoading]);
 
   if (isLoading) {
     return (

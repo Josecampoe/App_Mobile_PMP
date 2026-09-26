@@ -13,9 +13,8 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
-
-type RolUsuario = 'agricultor' | 'tecnico';
+import { authApi } from '../../lib/api';
+import type { RolUsuario } from '../../lib/types';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -45,38 +44,28 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
+    const result = await authApi.register({
       email: email.trim(),
       password,
-      options: {
-        data: {
-          nombre: nombre.trim(),
-          rol,
-        },
-      },
+      nombre: nombre.trim(),
+      rol,
     });
 
     setIsLoading(false);
 
-    if (error) {
-      let msg = 'No se pudo crear la cuenta.';
-      if (error.message.includes('already registered')) {
-        msg = 'Este correo ya está registrado. Intenta iniciar sesión.';
-      } else if (error.message.includes('valid email')) {
-        msg = 'Ingresa un correo electrónico válido.';
-      }
-      Alert.alert('Error de Registro', msg);
+    if (!result.success) {
+      Alert.alert('Error de Registro', result.error || 'No se pudo crear la cuenta.');
       return;
     }
 
-    if (data.session) {
-      // Si la confirmación de email está deshabilitada, se inicia sesión automáticamente
+    if (result.data) {
+      // Registro exitoso con sesión automática
       router.replace('/(tabs)');
     } else {
-      // Si se requiere confirmación de email
+      // Se requiere confirmación de email
       Alert.alert(
         '¡Cuenta Creada!',
-        'Revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.',
+        result.message || 'Revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.',
         [{ text: 'Ir al Login', onPress: () => router.replace('/auth/login') }]
       );
     }

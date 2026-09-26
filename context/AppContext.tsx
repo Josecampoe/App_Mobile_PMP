@@ -1,71 +1,31 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
+import {
+  perfilApi,
+  cultivosApi,
+  analisisApi,
+  revisionesApi,
+  getAccessToken,
+} from '../lib/api';
+import type {
+  RolUsuario,
+  Cultivo,
+  Analisis,
+  RevisionTecnica,
+  PerfilAgricultor,
+  PerfilTecnico,
+  CreateRevisionDTO,
+} from '../lib/types';
 
-export type RolUsuario = 'agricultor' | 'tecnico';
-
-export interface Cultivo {
-  id: string;
-  nombre: string;
-  variedad: string;
-  hectareas: number;
-  ubicacion: string;
-  fechaSiembra: string;
-  estadoFitosanitario: 'optimo' | 'observacion' | 'alerta';
-  analisisCount: number;
-  ultimaRevision: string;
-}
-
-export interface RevisionTecnica {
-  tecnicoNombre: string;
-  registroProfesional?: string;
-  fechaRevision: string;
-  diagnosticoValidado:
-    | 'PMP Confirmado'
-    | 'Sospecha Moderada'
-    | 'Descartado - Sano'
-    | 'Deficiencia Nutricional'
-    | 'Virosis / Otra Afección';
-  observaciones: string;
-  tratamientoRecomendado: string;
-}
-
-export interface Analisis {
-  id: string;
-  cultivoId: string;
-  cultivoNombre: string;
-  fecha: string;
-  imageUri: string;
-  diagnostico: 'Posible PMP' | 'Sano' | 'PMP Severo' | 'Deficiencia Nutricional';
-  estado: 'alerta' | 'sano' | 'observacion';
-  severidad: 'baja' | 'moderada' | 'alta' | 'ninguna';
-  confianza: number;
-  sintomas: string[];
-  recomendaciones: string[];
-  notas?: string;
-  estadoRevision: 'sin_solicitar' | 'pendiente' | 'revisado';
-  revisionTecnica?: RevisionTecnica;
-}
-
-export interface PerfilAgricultor {
-  nombre: string;
-  fincaPrincipal: string;
-  ubicacion: string;
-  telefono: string;
-  email: string;
-  notificaciones: boolean;
-  modoOffline: boolean;
-}
-
-export interface PerfilTecnico {
-  nombre: string;
-  registroProfesional: string;
-  especialidad: string;
-  entidad: string;
-  telefono: string;
-  email: string;
-  notificaciones: boolean;
-}
+// Re-exportar tipos para que los componentes los importen desde aquí
+export type {
+  RolUsuario,
+  Cultivo,
+  Analisis,
+  RevisionTecnica,
+  PerfilAgricultor,
+  PerfilTecnico,
+};
 
 interface AppContextType {
   rolActivo: RolUsuario;
@@ -78,7 +38,7 @@ interface AppContextType {
   setSelectedCultivoId: (id: string) => void;
   addCultivo: (cultivo: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>) => Cultivo;
   deleteCultivo: (id: string) => void;
-  addAnalisis: (analisis: Omit<Analisis, 'id' | 'fecha'>) => Analisis;
+  addAnalisis: (analisis: Omit<Analisis, 'id' | 'fecha'>, localImageUri?: string) => void;
   deleteAnalisis: (id: string) => void;
   solicitarRevisionTecnica: (analisisId: string) => void;
   guardarRevisionTecnica: (analisisId: string, revision: Omit<RevisionTecnica, 'fechaRevision'>) => void;
@@ -86,16 +46,17 @@ interface AppContextType {
   updatePerfilTecnico: (datos: Partial<PerfilTecnico>) => void;
   cargarDatosDemo: () => void;
   limpiarTodosLosDatos: () => void;
+  refreshData: () => Promise<void>;
   isLoading: boolean;
 }
 
 // Claves para caché local (respaldo offline)
 const CACHE_KEYS = {
-  ROL_ACTIVO: '@pmp_smart_rol_activo_v3',
-  CULTIVOS: '@pmp_smart_cultivos_v3',
-  HISTORIAL: '@pmp_smart_historial_v3',
-  PERFIL_AGRICULTOR: '@pmp_smart_perfil_agr_v3',
-  PERFIL_TECNICO: '@pmp_smart_perfil_tec_v3',
+  ROL_ACTIVO: '@pmp_smart_rol_activo_v4',
+  CULTIVOS: '@pmp_smart_cultivos_v4',
+  HISTORIAL: '@pmp_smart_historial_v4',
+  PERFIL_AGRICULTOR: '@pmp_smart_perfil_agr_v4',
+  PERFIL_TECNICO: '@pmp_smart_perfil_tec_v4',
 };
 
 const DEFAULT_PERFIL_AGRICULTOR: PerfilAgricultor = {
@@ -120,45 +81,6 @@ const DEFAULT_PERFIL_TECNICO: PerfilTecnico = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// ==========================================
-// Helpers para mapeo Supabase <-> App
-// ==========================================
-
-/** Mapear row de Supabase a interfaz Cultivo local */
-function mapCultivoFromDB(row: any): Cultivo {
-  return {
-    id: row.id,
-    nombre: row.nombre,
-    variedad: row.variedad,
-    hectareas: Number(row.hectareas),
-    ubicacion: row.ubicacion || '',
-    fechaSiembra: row.fecha_siembra || '',
-    estadoFitosanitario: row.estado_fitosanitario || 'optimo',
-    analisisCount: row.analisis_count || 0,
-    ultimaRevision: row.ultima_revision || 'Sin revisar',
-  };
-}
-
-/** Mapear row de Supabase a interfaz Analisis local */
-function mapAnalisisFromDB(row: any): Analisis {
-  return {
-    id: row.id,
-    cultivoId: row.cultivo_id || 'lote-general',
-    cultivoNombre: row.cultivo_nombre || 'Muestra de Campo',
-    fecha: row.fecha || 'Fecha no registrada',
-    imageUri: row.image_url || '',
-    diagnostico: row.diagnostico || 'Posible PMP',
-    estado: row.estado || 'alerta',
-    severidad: row.severidad || 'moderada',
-    confianza: Number(row.confianza) || 90,
-    sintomas: Array.isArray(row.sintomas) ? row.sintomas : [],
-    recomendaciones: Array.isArray(row.recomendaciones) ? row.recomendaciones : [],
-    notas: row.notas || '',
-    estadoRevision: row.estado_revision || 'sin_solicitar',
-    revisionTecnica: undefined, // Se carga aparte si existe
-  };
-}
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [rolActivo, setRolActivoState] = useState<RolUsuario>('agricultor');
   const [cultivos, setCultivos] = useState<Cultivo[]>([]);
@@ -169,7 +91,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // ==========================================
-  // Cargar datos desde Supabase al iniciar
+  // Cargar datos al iniciar
   // ==========================================
   useEffect(() => {
     loadAllData();
@@ -177,102 +99,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const loadAllData = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const token = await getAccessToken();
 
-      if (!session?.user) {
-        // Sin sesión: intentar cargar caché local
+      if (!token) {
         await loadFromCache();
         setIsLoading(false);
         return;
       }
 
-      const userId = session.user.id;
-
-      // Cargar datos en paralelo desde Supabase
+      // Cargar datos en paralelo desde la API
       const [perfilRes, cultivosRes, analisisRes] = await Promise.all([
-        supabase.from('perfiles').select('*').eq('id', userId).single(),
-        supabase.from('cultivos').select('*').eq('usuario_id', userId).order('created_at', { ascending: false }),
-        supabase.from('analisis').select('*').eq('usuario_id', userId).order('created_at', { ascending: false }),
+        perfilApi.get(),
+        cultivosApi.list(),
+        analisisApi.list(),
       ]);
 
       // Perfil
-      if (perfilRes.data) {
+      if (perfilRes.success && perfilRes.data) {
         const p = perfilRes.data;
-        setRolActivoState(p.rol as RolUsuario);
+        setRolActivoState(p.rol);
 
-        if (p.rol === 'agricultor') {
-          setPerfilAgricultor({
-            nombre: p.nombre || DEFAULT_PERFIL_AGRICULTOR.nombre,
-            fincaPrincipal: p.finca_principal || DEFAULT_PERFIL_AGRICULTOR.fincaPrincipal,
-            ubicacion: p.ubicacion || DEFAULT_PERFIL_AGRICULTOR.ubicacion,
-            telefono: p.telefono || '',
-            email: p.email || '',
-            notificaciones: p.notificaciones ?? true,
-            modoOffline: p.modo_offline ?? true,
-          });
-        } else {
-          setPerfilTecnico({
-            nombre: p.nombre || DEFAULT_PERFIL_TECNICO.nombre,
-            registroProfesional: p.registro_profesional || DEFAULT_PERFIL_TECNICO.registroProfesional,
-            especialidad: p.especialidad || DEFAULT_PERFIL_TECNICO.especialidad,
-            entidad: p.entidad || DEFAULT_PERFIL_TECNICO.entidad,
-            telefono: p.telefono || '',
-            email: p.email || '',
-            notificaciones: p.notificaciones ?? true,
-          });
+        if (p.rol === 'agricultor' && p.agricultor) {
+          setPerfilAgricultor(p.agricultor);
+          await AsyncStorage.setItem(CACHE_KEYS.PERFIL_AGRICULTOR, JSON.stringify(p.agricultor));
+        } else if (p.tecnico) {
+          setPerfilTecnico(p.tecnico);
+          await AsyncStorage.setItem(CACHE_KEYS.PERFIL_TECNICO, JSON.stringify(p.tecnico));
         }
+
+        await AsyncStorage.setItem(CACHE_KEYS.ROL_ACTIVO, p.rol);
       }
 
       // Cultivos
-      if (cultivosRes.data) {
-        const mapped = cultivosRes.data.map(mapCultivoFromDB);
-        setCultivos(mapped);
-        if (mapped.length > 0) setSelectedCultivoId(mapped[0].id);
-        // Guardar en caché local
-        await AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(mapped));
+      if (cultivosRes.success && cultivosRes.data) {
+        setCultivos(cultivosRes.data);
+        if (cultivosRes.data.length > 0) setSelectedCultivoId(cultivosRes.data[0].id);
+        await AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(cultivosRes.data));
       }
 
       // Análisis
-      if (analisisRes.data) {
-        // Cargar revisiones técnicas para cada análisis revisado
-        const analisisIds = analisisRes.data
-          .filter((a: any) => a.estado_revision === 'revisado')
-          .map((a: any) => a.id);
-
-        let revisionesMap: Record<string, RevisionTecnica> = {};
-        if (analisisIds.length > 0) {
-          const { data: revData } = await supabase
-            .from('revisiones_tecnicas')
-            .select('*')
-            .in('analisis_id', analisisIds);
-
-          if (revData) {
-            for (const rev of revData) {
-              revisionesMap[rev.analisis_id] = {
-                tecnicoNombre: rev.tecnico_nombre,
-                registroProfesional: rev.registro_profesional,
-                fechaRevision: rev.fecha_revision,
-                diagnosticoValidado: rev.diagnostico_validado,
-                observaciones: rev.observaciones || '',
-                tratamientoRecomendado: rev.tratamiento_recomendado || '',
-              };
-            }
-          }
-        }
-
-        const mapped = analisisRes.data.map((row: any) => {
-          const analisis = mapAnalisisFromDB(row);
-          if (revisionesMap[analisis.id]) {
-            analisis.revisionTecnica = revisionesMap[analisis.id];
-          }
-          return analisis;
-        });
-
-        setAnalisisHistorial(mapped);
-        await AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(mapped));
+      if (analisisRes.success && analisisRes.data) {
+        setAnalisisHistorial(analisisRes.data);
+        await AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(analisisRes.data));
       }
     } catch (e) {
-      console.warn('Error al cargar datos desde Supabase, intentando caché local:', e);
+      console.warn('Error al cargar datos desde la API, intentando caché local:', e);
       await loadFromCache();
     } finally {
       setIsLoading(false);
@@ -325,26 +196,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ==========================================
-  // Helpers internos
-  // ==========================================
-
-  const getUserId = async (): Promise<string | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.user?.id ?? null;
-  };
-
-  const formatearFechaActual = () => {
-    const now = new Date();
-    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const dia = String(now.getDate()).padStart(2, '0');
-    const mes = meses[now.getMonth()];
-    const anio = now.getFullYear();
-    const horas = now.getHours();
-    const minutos = String(now.getMinutes()).padStart(2, '0');
-    const ampm = horas >= 12 ? 'PM' : 'AM';
-    const hora12 = horas % 12 || 12;
-    return `${dia} ${mes} ${anio} - ${hora12}:${minutos} ${ampm}`;
+  /** Recargar datos desde la API */
+  const refreshData = async () => {
+    await loadAllData();
   };
 
   // ==========================================
@@ -353,23 +207,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setRolActivo = async (rol: RolUsuario) => {
     setRolActivoState(rol);
-    try {
-      await AsyncStorage.setItem(CACHE_KEYS.ROL_ACTIVO, rol);
-      const userId = await getUserId();
-      if (userId) {
-        await supabase.from('perfiles').update({ rol }).eq('id', userId);
-      }
-    } catch (e) {
-      console.warn('Error al cambiar rol:', e);
-    }
+    await AsyncStorage.setItem(CACHE_KEYS.ROL_ACTIVO, rol);
+
+    // Sincronizar con la API en background
+    perfilApi.cambiarRol(rol).catch((e) => {
+      console.warn('Error al cambiar rol en API:', e);
+    });
   };
 
   // ==========================================
   // Operaciones de Cultivos
   // ==========================================
 
-  const addCultivo = (cultivoData: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>): Cultivo => {
-    // Crear localmente con ID temporal
+  const addCultivo = (cultivoData: Omit<Cultivo, 'id' | 'analisisCount' | 'ultimaRevision'>) => {
+    // Crear localmente con ID temporal para respuesta inmediata
     const tempId = `c-${Date.now()}`;
     const nuevo: Cultivo = {
       ...cultivoData,
@@ -382,40 +233,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSelectedCultivoId(nuevo.id);
     AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(updated));
 
-    // Insertar en Supabase en background
-    (async () => {
-      const userId = await getUserId();
-      if (!userId) return;
-      const { data, error } = await supabase
-        .from('cultivos')
-        .insert({
-          usuario_id: userId,
-          nombre: cultivoData.nombre,
-          variedad: cultivoData.variedad,
-          hectareas: cultivoData.hectareas,
-          ubicacion: cultivoData.ubicacion,
-          fecha_siembra: cultivoData.fechaSiembra,
-          estado_fitosanitario: cultivoData.estadoFitosanitario,
-        })
-        .select()
-        .single();
-
-      if (data && !error) {
-        // Reemplazar el ID temporal por el UUID real de Supabase
-        setCultivos((prev) => {
-          const withRealId = prev.map((c) =>
-            c.id === tempId ? mapCultivoFromDB(data) : c
-          );
-          AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(withRealId));
-          return withRealId;
-        });
-        if (selectedCultivoId === tempId) {
-          setSelectedCultivoId(data.id);
+    // Crear en la API en background
+    cultivosApi
+      .create({
+        nombre: cultivoData.nombre,
+        variedad: cultivoData.variedad,
+        hectareas: cultivoData.hectareas,
+        ubicacion: cultivoData.ubicacion,
+        fechaSiembra: cultivoData.fechaSiembra,
+        estadoFitosanitario: cultivoData.estadoFitosanitario,
+      })
+      .then((res) => {
+        if (res.success && res.data) {
+          // Reemplazar ID temporal por el UUID real
+          setCultivos((prev) => {
+            const withRealId = prev.map((c) =>
+              c.id === tempId ? res.data! : c
+            );
+            AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(withRealId));
+            return withRealId;
+          });
+          if (selectedCultivoId === tempId) {
+            setSelectedCultivoId(res.data.id);
+          }
         }
-      } else if (error) {
-        console.warn('Error al insertar cultivo en Supabase:', error.message);
-      }
-    })();
+      })
+      .catch((e) => console.warn('Error al crear cultivo en API:', e));
 
     return nuevo;
   };
@@ -431,9 +274,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSelectedCultivoId('');
     }
 
-    // Eliminar de Supabase en background
-    supabase.from('cultivos').delete().eq('id', id).then(({ error }) => {
-      if (error) console.warn('Error al eliminar cultivo en Supabase:', error.message);
+    // Eliminar en la API en background
+    cultivosApi.delete(id).catch((e) => {
+      console.warn('Error al eliminar cultivo en API:', e);
     });
   };
 
@@ -441,12 +284,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Operaciones de Análisis
   // ==========================================
 
-  const addAnalisis = (analisisData: Omit<Analisis, 'id' | 'fecha'>): Analisis => {
+  const addAnalisis = (analisisData: Omit<Analisis, 'id' | 'fecha'>, localImageUri?: string) => {
     const tempId = `a-${Date.now()}`;
+    const fechaActual = formatearFechaActual();
     const nuevo: Analisis = {
       ...analisisData,
       id: tempId,
-      fecha: formatearFechaActual(),
+      fecha: fechaActual,
       estadoRevision: analisisData.estadoRevision || 'sin_solicitar',
       sintomas: analisisData.sintomas || [],
       recomendaciones: analisisData.recomendaciones || [],
@@ -476,83 +320,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCultivos(updatedCultivos);
     AsyncStorage.setItem(CACHE_KEYS.CULTIVOS, JSON.stringify(updatedCultivos));
 
-    // Insertar en Supabase en background
-    (async () => {
-      const userId = await getUserId();
-      if (!userId) return;
-
-      // Si hay una imagen local, subirla a Supabase Storage primero
-      let imageUrl = analisisData.imageUri;
-      if (analisisData.imageUri && !analisisData.imageUri.startsWith('http')) {
-        try {
-          const fileName = `${userId}/${Date.now()}.jpg`;
-          const response = await fetch(analisisData.imageUri);
-          const blob = await response.blob();
-
-          const { error: uploadError } = await supabase.storage
-            .from('analisis-fotos')
-            .upload(fileName, blob, { contentType: 'image/jpeg' });
-
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage
-              .from('analisis-fotos')
-              .getPublicUrl(fileName);
-            imageUrl = urlData.publicUrl;
-          }
-        } catch (e) {
-          console.warn('Error al subir imagen:', e);
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('analisis')
-        .insert({
-          usuario_id: userId,
-          cultivo_id: analisisData.cultivoId.startsWith('c-') ? null : analisisData.cultivoId,
-          cultivo_nombre: analisisData.cultivoNombre,
-          fecha: nuevo.fecha,
-          image_url: imageUrl,
+    // Crear en la API en background
+    analisisApi
+      .create(
+        {
+          cultivoId: analisisData.cultivoId,
+          cultivoNombre: analisisData.cultivoNombre,
           diagnostico: analisisData.diagnostico,
           estado: analisisData.estado,
           severidad: analisisData.severidad,
           confianza: analisisData.confianza,
           sintomas: analisisData.sintomas,
           recomendaciones: analisisData.recomendaciones,
-          notas: analisisData.notas || null,
-          estado_revision: analisisData.estadoRevision || 'sin_solicitar',
-        })
-        .select()
-        .single();
-
-      if (data && !error) {
-        setAnalisisHistorial((prev) => {
-          const withRealId = prev.map((a) =>
-            a.id === tempId ? { ...mapAnalisisFromDB(data), imageUri: imageUrl } : a
-          );
-          AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(withRealId));
-          return withRealId;
-        });
-      } else if (error) {
-        console.warn('Error al insertar análisis en Supabase:', error.message);
-      }
-
-      // Actualizar cultivo en Supabase
-      const cultivo = updatedCultivos.find(
-        (c) => c.id === nuevo.cultivoId || c.nombre === nuevo.cultivoNombre
-      );
-      if (cultivo && !cultivo.id.startsWith('c-')) {
-        await supabase
-          .from('cultivos')
-          .update({
-            analisis_count: cultivo.analisisCount,
-            ultima_revision: 'Hoy',
-            estado_fitosanitario: cultivo.estadoFitosanitario,
-          })
-          .eq('id', cultivo.id);
-      }
-    })();
-
-    return nuevo;
+          notas: analisisData.notas,
+          estadoRevision: analisisData.estadoRevision || 'sin_solicitar',
+          imageUri: analisisData.imageUri,
+        },
+        localImageUri
+      )
+      .then((res) => {
+        if (res.success && res.data) {
+          setAnalisisHistorial((prev) => {
+            const withRealId = prev.map((a) =>
+              a.id === tempId ? res.data! : a
+            );
+            AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(withRealId));
+            return withRealId;
+          });
+        }
+      })
+      .catch((e) => console.warn('Error al crear análisis en API:', e));
   };
 
   const deleteAnalisis = (id: string) => {
@@ -560,9 +357,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAnalisisHistorial(updated);
     AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(updated));
 
-    // Eliminar de Supabase en background
-    supabase.from('analisis').delete().eq('id', id).then(({ error }) => {
-      if (error) console.warn('Error al eliminar análisis en Supabase:', error.message);
+    // Eliminar en la API en background
+    analisisApi.delete(id).catch((e) => {
+      console.warn('Error al eliminar análisis en API:', e);
     });
   };
 
@@ -580,23 +377,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAnalisisHistorial(updated);
     AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(updated));
 
-    // Actualizar en Supabase
-    supabase
-      .from('analisis')
-      .update({ estado_revision: 'pendiente' })
-      .eq('id', analisisId)
-      .then(({ error }) => {
-        if (error) console.warn('Error al solicitar revisión en Supabase:', error.message);
-      });
+    // Sincronizar con la API
+    analisisApi.solicitarRevision(analisisId).catch((e) => {
+      console.warn('Error al solicitar revisión en API:', e);
+    });
   };
 
   const guardarRevisionTecnica = (
     analisisId: string,
     revision: Omit<RevisionTecnica, 'fechaRevision'>
   ) => {
+    const fechaRevision = formatearFechaActual();
     const revisionCompleta: RevisionTecnica = {
       ...revision,
-      fechaRevision: formatearFechaActual(),
+      fechaRevision,
     };
 
     const updated = analisisHistorial.map((a) => {
@@ -604,7 +398,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const esAlerta =
           revisionCompleta.diagnosticoValidado === 'PMP Confirmado' ||
           revisionCompleta.diagnosticoValidado === 'Sospecha Moderada';
-
         return {
           ...a,
           estadoRevision: 'revisado' as const,
@@ -617,36 +410,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAnalisisHistorial(updated);
     AsyncStorage.setItem(CACHE_KEYS.HISTORIAL, JSON.stringify(updated));
 
-    // Guardar revisión en Supabase
-    (async () => {
-      const userId = await getUserId();
-      if (!userId) return;
-
-      const esAlerta =
-        revisionCompleta.diagnosticoValidado === 'PMP Confirmado' ||
-        revisionCompleta.diagnosticoValidado === 'Sospecha Moderada';
-
-      // Insertar revisión técnica
-      await supabase.from('revisiones_tecnicas').insert({
-        analisis_id: analisisId,
-        tecnico_id: userId,
-        tecnico_nombre: revisionCompleta.tecnicoNombre,
-        registro_profesional: revisionCompleta.registroProfesional || null,
-        fecha_revision: revisionCompleta.fechaRevision,
-        diagnostico_validado: revisionCompleta.diagnosticoValidado,
-        observaciones: revisionCompleta.observaciones,
-        tratamiento_recomendado: revisionCompleta.tratamientoRecomendado,
-      });
-
-      // Actualizar estado del análisis
-      await supabase
-        .from('analisis')
-        .update({
-          estado_revision: 'revisado',
-          estado: esAlerta ? 'alerta' : 'sano',
-        })
-        .eq('id', analisisId);
-    })();
+    // Sincronizar con la API
+    const dto: CreateRevisionDTO = {
+      tecnicoNombre: revision.tecnicoNombre,
+      registroProfesional: revision.registroProfesional,
+      diagnosticoValidado: revision.diagnosticoValidado,
+      observaciones: revision.observaciones,
+      tratamientoRecomendado: revision.tratamientoRecomendado,
+    };
+    revisionesApi.guardarDictamen(analisisId, dto).catch((e) => {
+      console.warn('Error al guardar revisión en API:', e);
+    });
   };
 
   // ==========================================
@@ -663,23 +437,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPerfilAgricultor(updated);
       await AsyncStorage.setItem(CACHE_KEYS.PERFIL_AGRICULTOR, JSON.stringify(updated));
 
-      // Actualizar en Supabase
-      const userId = await getUserId();
-      if (userId) {
-        await supabase
-          .from('perfiles')
-          .update({
-            nombre: updated.nombre,
-            finca_principal: updated.fincaPrincipal,
-            ubicacion: updated.ubicacion,
-            telefono: updated.telefono,
-            email: updated.email,
-            notificaciones: updated.notificaciones,
-            modo_offline: updated.modoOffline,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
-      }
+      // Sincronizar con la API
+      perfilApi.update(datos).catch((e) => {
+        console.warn('Error al actualizar perfil agricultor en API:', e);
+      });
     } catch (e) {
       console.warn('Error al actualizar perfil agricultor:', e);
     }
@@ -695,23 +456,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPerfilTecnico(updated);
       await AsyncStorage.setItem(CACHE_KEYS.PERFIL_TECNICO, JSON.stringify(updated));
 
-      // Actualizar en Supabase
-      const userId = await getUserId();
-      if (userId) {
-        await supabase
-          .from('perfiles')
-          .update({
-            nombre: updated.nombre,
-            registro_profesional: updated.registroProfesional,
-            especialidad: updated.especialidad,
-            entidad: updated.entidad,
-            telefono: updated.telefono,
-            email: updated.email,
-            notificaciones: updated.notificaciones,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
-      }
+      // Sincronizar con la API
+      perfilApi.update(datos).catch((e) => {
+        console.warn('Error al actualizar perfil técnico en API:', e);
+      });
     } catch (e) {
       console.warn('Error al actualizar perfil técnico:', e);
     }
@@ -815,15 +563,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPerfilAgricultor(DEFAULT_PERFIL_AGRICULTOR);
       setPerfilTecnico(DEFAULT_PERFIL_TECNICO);
 
-      // También limpiar en Supabase
-      const userId = await getUserId();
-      if (userId) {
-        await supabase.from('analisis').delete().eq('usuario_id', userId);
-        await supabase.from('cultivos').delete().eq('usuario_id', userId);
-      }
+      // Nota: La limpieza en la API se haría con endpoints dedicados
+      // Por ahora solo limpia datos locales
     } catch (e) {
       console.warn('Error al limpiar datos:', e);
     }
+  };
+
+  // ==========================================
+  // Helper
+  // ==========================================
+
+  const formatearFechaActual = () => {
+    const now = new Date();
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const dia = String(now.getDate()).padStart(2, '0');
+    const mes = meses[now.getMonth()];
+    const anio = now.getFullYear();
+    const horas = now.getHours();
+    const minutos = String(now.getMinutes()).padStart(2, '0');
+    const ampm = horas >= 12 ? 'PM' : 'AM';
+    const hora12 = horas % 12 || 12;
+    return `${dia} ${mes} ${anio} - ${hora12}:${minutos} ${ampm}`;
   };
 
   return (
@@ -847,6 +608,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatePerfilTecnico,
         cargarDatosDemo,
         limpiarTodosLosDatos,
+        refreshData,
         isLoading,
       }}>
       {children}
