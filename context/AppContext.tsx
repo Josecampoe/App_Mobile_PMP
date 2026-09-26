@@ -6,6 +6,7 @@ import {
   analisisApi,
   revisionesApi,
   getAccessToken,
+  authEvents,
 } from '../lib/api';
 import type {
   RolUsuario,
@@ -95,6 +96,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ==========================================
   useEffect(() => {
     loadAllData();
+    
+    // Escuchar eventos de auth (login/logout)
+    const unsubscribe = authEvents.subscribe(async (isAuthenticated) => {
+      if (isAuthenticated) {
+        setIsLoading(true);
+        await loadAllData();
+      } else {
+        // Logout: Limpiar TODO el estado y caché
+        setRolActivoState('agricultor');
+        setCultivos([]);
+        setAnalisisHistorial([]);
+        setPerfilAgricultor(DEFAULT_PERFIL_AGRICULTOR);
+        setPerfilTecnico(DEFAULT_PERFIL_TECNICO);
+        setSelectedCultivoId('');
+        
+        await AsyncStorage.multiRemove([
+          CACHE_KEYS.ROL_ACTIVO,
+          CACHE_KEYS.CULTIVOS,
+          CACHE_KEYS.HISTORIAL,
+          CACHE_KEYS.PERFIL_AGRICULTOR,
+          CACHE_KEYS.PERFIL_TECNICO,
+        ]);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const loadAllData = async () => {
@@ -119,12 +146,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const p = perfilRes.data;
         setRolActivoState(p.rol);
 
-        if (p.rol === 'agricultor' && p.agricultor) {
-          setPerfilAgricultor(p.agricultor);
-          await AsyncStorage.setItem(CACHE_KEYS.PERFIL_AGRICULTOR, JSON.stringify(p.agricultor));
-        } else if (p.tecnico) {
-          setPerfilTecnico(p.tecnico);
-          await AsyncStorage.setItem(CACHE_KEYS.PERFIL_TECNICO, JSON.stringify(p.tecnico));
+        if (p.rol === 'agricultor') {
+          if (p.agricultor) {
+            setPerfilAgricultor(p.agricultor);
+            await AsyncStorage.setItem(CACHE_KEYS.PERFIL_AGRICULTOR, JSON.stringify(p.agricultor));
+          }
+          // Limpiar datos técnicos de sesión anterior
+          setPerfilTecnico(DEFAULT_PERFIL_TECNICO);
+          await AsyncStorage.removeItem(CACHE_KEYS.PERFIL_TECNICO);
+        } else if (p.rol === 'tecnico') {
+          if (p.tecnico) {
+            setPerfilTecnico(p.tecnico);
+            await AsyncStorage.setItem(CACHE_KEYS.PERFIL_TECNICO, JSON.stringify(p.tecnico));
+          }
+          // Limpiar datos de agricultor de sesión anterior
+          setPerfilAgricultor(DEFAULT_PERFIL_AGRICULTOR);
+          await AsyncStorage.removeItem(CACHE_KEYS.PERFIL_AGRICULTOR);
         }
 
         await AsyncStorage.setItem(CACHE_KEYS.ROL_ACTIVO, p.rol);
