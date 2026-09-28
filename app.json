@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "pmp-smart",
+    "slug": "pmp-smart",
+    "scheme": "pmpsmart",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite a PMP Smart acceder a tu cámara para capturar fotos de las hojas de tus cultivos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite a PMP Smart acceder a tus fotos para analizar hojas de papa guardadas en tu galería."
+        }
+      ]
+    ]
+  }
+}
