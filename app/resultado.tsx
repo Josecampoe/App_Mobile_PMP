@@ -8,17 +8,15 @@ import { analisisApi } from '../lib/api';
 
 export default function ResultadoScreen() {
   const router = useRouter();
-  const { imageUri, cultivoId, cultivoNombre } = useLocalSearchParams<{
-    imageUri?: string;
+  const { cultivoId, cultivoNombre } = useLocalSearchParams<{
     cultivoId?: string;
     cultivoNombre?: string;
   }>();
 
-  const { addAnalisis, cultivos } = useApp();
+  const { addAnalisis, cultivos, currentImageB64 } = useApp();
   const [isSaving, setIsSaving] = useState(false);
 
-  const decodedImageUri = imageUri ? decodeURIComponent(imageUri) : null;
-  const displayImageUri = decodedImageUri || 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a';
+  const displayImageUri = currentImageB64 ? `data:image/jpeg;base64,${currentImageB64}` : 'https://images.unsplash.com/photo-1555431189-0ab279e2be3a';
 
   const targetCultivo =
     cultivos.find((c) => c.id === cultivoId) ||

@@ -10,7 +10,8 @@ import {
   ScrollView,
   TextInput,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, FlashMode, useCameraPermissions } from 'expo-camera';
@@ -23,13 +24,25 @@ export default function CameraScreen() {
   const params = useLocalSearchParams<{ cultivoId?: string }>();
   const cameraRef = useRef<CameraView>(null);
 
-  const { cultivos, selectedCultivoId, setSelectedCultivoId, addCultivo } = useApp();
+  const { cultivos, selectedCultivoId, setSelectedCultivoId, addCultivo, setCurrentImageB64 } = useApp();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [selectorVisible, setSelectorVisible] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => {
+        // Retrasamos el desmontaje para evitar el pantallazo negro durante la transición
+        setTimeout(() => setIsFocused(false), 500);
+      };
+    }, [])
+  );
 
   // Modal para crear parcela rápida si no tiene
   const [modalNuevoLote, setModalNuevoLote] = useState(false);
@@ -58,13 +71,15 @@ export default function CameraScreen() {
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.85,
+        base64: true,
       });
 
-      if (!result.canceled && result.assets?.[0]?.uri) {
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        setCurrentImageB64(result.assets[0].base64);
+
         router.push({
           pathname: '/resultado',
           params: {
-            imageUri: result.assets[0].uri,
             cultivoId: currentCultivo.id,
             cultivoNombre: currentCultivo.nombre,
           },
@@ -77,24 +92,26 @@ export default function CameraScreen() {
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current || isCapturing) return;
+    if (!cameraRef.current || isCapturing || !isCameraReady) return;
 
     try {
       setIsCapturing(true);
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.85,
+        quality: 0.75, // Previene OOM al no solicitar máxima resolución
+        base64: true, // Previene saturación del bridge nativo
       });
 
-      if (photo?.uri) {
-        // Copy from volatile cache to persistent storage
-        const fileName = `photo_${Date.now()}.jpg`;
-        const destUri = FileSystem.documentDirectory + fileName;
-        await FileSystem.copyAsync({ from: photo.uri, to: destUri });
+      if (photo?.base64) {
+        // Restaurar la vista previa
+        if (cameraRef.current.resumePreview) {
+          await cameraRef.current.resumePreview();
+        }
+
+        setCurrentImageB64(photo.base64);
 
         router.push({
           pathname: '/resultado',
           params: {
-            imageUri: destUri,
             cultivoId: currentCultivo.id,
             cultivoNombre: currentCultivo.nombre,
           },
@@ -103,6 +120,9 @@ export default function CameraScreen() {
     } catch (error) {
       console.error('Error al capturar foto:', error);
       Alert.alert('Error', 'No se pudo capturar la foto. Intenta de nuevo.');
+      if (cameraRef.current?.resumePreview) {
+        await cameraRef.current.resumePreview();
+      }
     } finally {
       setIsCapturing(false);
     }
@@ -194,14 +214,23 @@ export default function CameraScreen() {
 
   return (
     <View className="flex-1 bg-black">
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        flash={flash}
-        autofocus="on"
-        enableTorch={flash === 'on'}
-      />
+      {isFocused && (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          flash={flash}
+          onCameraReady={() => setIsCameraReady(true)}
+        />
+      )}
+
+      {isCapturing && (
+        <View className="absolute z-50 w-full h-full bg-black/60 items-center justify-center">
+          <ActivityIndicator size="large" color="#43A047" />
+          <Text className="text-white mt-4 font-bold text-base">Procesando imagen...</Text>
+        </View>
+      )}
+
       <SafeAreaView className="absolute w-full h-full justify-between" pointerEvents="box-none">
           {/* Barra superior */}
           <View className="bg-black/40 px-4 py-3 flex-row justify-between items-center backdrop-blur-md">
@@ -275,13 +304,11 @@ export default function CameraScreen() {
 
               <TouchableOpacity
                 onPress={takePicture}
-                disabled={isCapturing}
-                className="w-20 h-20 rounded-full border-4 border-white items-center justify-center shadow-lg active:scale-95 bg-white/20">
-                {isCapturing ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <View className="w-16 h-16 rounded-full bg-white shadow-md" />
-                )}
+                disabled={isCapturing || !isCameraReady}
+                className={`w-20 h-20 rounded-full border-4 border-white items-center justify-center shadow-lg active:scale-95 ${
+                  isCapturing || !isCameraReady ? 'bg-white/10 opacity-50' : 'bg-white/20'
+                }`}>
+                <View className="w-16 h-16 rounded-full bg-white shadow-md" />
               </TouchableOpacity>
 
               <TouchableOpacity

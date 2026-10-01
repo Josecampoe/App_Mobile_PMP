@@ -49,6 +49,8 @@ interface AppContextType {
   limpiarTodosLosDatos: () => void;
   refreshData: () => Promise<void>;
   isLoading: boolean;
+  currentImageB64: string | null;
+  setCurrentImageB64: (b64: string | null) => void;
 }
 
 // Claves para caché local (respaldo offline)
@@ -91,6 +93,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedCultivoId, setSelectedCultivoId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
+  const [currentImageB64, setCurrentImageB64] = useState<string | null>(null);
+
   // ==========================================
   // Cargar datos al iniciar
   // ==========================================
@@ -110,6 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPerfilAgricultor(DEFAULT_PERFIL_AGRICULTOR);
         setPerfilTecnico(DEFAULT_PERFIL_TECNICO);
         setSelectedCultivoId('');
+        setCurrentImageB64(null);
         
         await AsyncStorage.multiRemove([
           CACHE_KEYS.ROL_ACTIVO,
@@ -647,6 +652,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         limpiarTodosLosDatos,
         refreshData,
         isLoading,
+        currentImageB64,
+        setCurrentImageB64,
       }}>
       {children}
     </AppContext.Provider>

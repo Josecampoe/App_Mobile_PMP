@@ -15,6 +15,9 @@ import type {
   RolUsuario,
 } from './types';
 import * as FileSystem from 'expo-file-system/legacy'; // For reading/moving files
+import { LogBox } from 'react-native';
+
+LogBox.ignoreLogs(["Response.blob() is using React Native's Blob"]);
 
 export type {
   ApiResponse,
@@ -35,7 +38,7 @@ export type {
 // ============================================================
 // Configuración
 // ============================================================
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = 'http://192.168.1.11:3001';
 
 // Constantes de AsyncStorage
 const TOKEN_KEY = '@pmp_smart_access_token';
@@ -83,9 +86,19 @@ async function saveLocalData<T>(key: string, value: T): Promise<void> {
 // Fetch (Solo usado para el AI endpoint)
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   try {
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {})
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers,
     });
     return (await response.json()) as ApiResponse<T>;
   } catch (error) {
@@ -338,21 +351,26 @@ export const analisisApi = {
       const cleanUri = decodeURIComponent(imageUri);
       let base64 = '';
 
-      if (cleanUri.startsWith('file://')) {
-        base64 = await FileSystem.readAsStringAsync(cleanUri, { encoding: FileSystem.EncodingType.Base64 });
-      } else {
+      if (cleanUri.startsWith('data:image')) {
+        base64 = cleanUri.split(',')[1];
+      } else if (cleanUri.startsWith('http')) {
         const response = await fetch(cleanUri);
         const blob = await response.blob();
         base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             if (typeof reader.result === 'string') {
-              const b64 = reader.result.split(',')[1];
-              resolve(b64);
-            } else reject(new Error('FileReader no retornó string'));
+              resolve(reader.result.split(',')[1]);
+            } else {
+              reject(new Error('FileReader no retornó string'));
+            }
           };
           reader.onerror = reject;
           reader.readAsDataURL(blob);
+        });
+      } else {
+        base64 = await FileSystem.readAsStringAsync(cleanUri, {
+          encoding: FileSystem.EncodingType.Base64,
         });
       }
       

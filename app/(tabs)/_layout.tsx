@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { View, Text } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 
-function TabIcon({ name, color, focused, label }: { name: any; color: string; focused: boolean; label: string }) {
+function TabIcon({ name, color, focused, label }: { name: any; color: any; focused: boolean; label: string }) {
   return (
     <View style={{ alignItems: 'center', paddingTop: 4 }}>
       <View
